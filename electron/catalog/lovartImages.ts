@@ -18,6 +18,9 @@ const CREATE_HEADERS = { Authorization: "Bearer {{user_api_key}}", "Content-Type
 const SIZE = "{{request.params.size}}";
 const RESOLUTION = "{{request.params.resolution}}";
 const IMAGE_URLS = "{{request.params.image_urls}}";
+// GPT Image 2 档案改图槽 inputKey=input_urls（kie 契约），而网关字段名是 image_urls →
+// 值必须读 input_urls，否则参考图永远进不了 body（与 apimartImages.ts 的 gpt-image-2 同构修法）。
+const GPT_IMAGE_URLS = "{{request.params.input_urls}}";
 
 /** 网关侧统一参数翻译：中性比例 → size；清晰度档位小写；drop 网关不读的 output_format。 */
 const LOVART_IMAGE_PARAM_MAP: ParamMap = {
@@ -76,21 +79,21 @@ function imageModel(p: {
 
 /** Lovart 网关 /v1/models 返回的图片模型（精选子集，单源；seedBuiltins 据此注册 catalog 行 + mapping）。 */
 export const LOVART_IMAGE_MODELS: LovartImageModel[] = [
-  // GPT Image 2 三档：文生图 + 改图（image_urls）。
+  // GPT Image 2 三档：文生图 + 改图（input_urls 参考图 → 网关 image_urls 字段）。
   imageModel({
     modelKey: "gpt-image-2", labelZh: "GPT Image 2", archetypeId: "gpt-image-2",
     t2iBody: { size: SIZE, resolution: RESOLUTION },
-    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: IMAGE_URLS },
+    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: GPT_IMAGE_URLS },
   }),
   imageModel({
     modelKey: "gpt-image-2-low", labelZh: "GPT Image 2 Low", archetypeId: "gpt-image-2",
     t2iBody: { size: SIZE, resolution: RESOLUTION },
-    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: IMAGE_URLS },
+    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: GPT_IMAGE_URLS },
   }),
   imageModel({
     modelKey: "gpt-image-2-medium", labelZh: "GPT Image 2 Medium", archetypeId: "gpt-image-2",
     t2iBody: { size: SIZE, resolution: RESOLUTION },
-    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: IMAGE_URLS },
+    editBody: { size: SIZE, resolution: RESOLUTION, image_urls: GPT_IMAGE_URLS },
   }),
   // Nano Banana 两档（Pro / 2）：复用 nano-banana 档案；output_format 被 paramMap drop。
   imageModel({

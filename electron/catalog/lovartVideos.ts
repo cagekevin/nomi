@@ -5,9 +5,20 @@
 //
 // 轮询/状态归一复用 lovartVendor 的 LOVART_VIDEO_QUERY_OP + LOVART_STATUS_MAPPING。
 //
-// 参数翻译：网关读 size（比例/像素）+ resolution（档位小写）+ duration。档案中性 canonical 是
-// aspect_ratio + resolution + duration（seedance-2）。统一用 LOVART_VIDEO_PARAM_MAP 把
-// aspect_ratio → size、resolution 转小写、drop 网关不读的 generate_audio。
+// **档案选择（2026-08-10 修复根因）**：必须用 `seedance-2-apimart` 而非通用 `seedance-2`。
+// 通用 seedance-2 档案是 kie 契约（图生视频槽产出 first_frame_url / reference_image_urls 等分离键），
+// 但 lovart 网关（main.py _do_submit）只读扁平 image_urls 一族 → 参考图永远进不了请求体
+// （第三闸如实报"发不出参考图"，参考 referenceSlotConsistency.test.ts 的机器校验）。
+// `seedance-2-apimart` 的图生视频槽 inputKey 就是 image_urls/video_urls/audio_urls，与网关契约一致。
+//
+// 网关能力边界（main.py 源码实证，2026-08-10）：
+//   _do_submit 提取参考素材只读 image_urls/images/attachments/reference_images/videos/reference_videos/
+//   audios/reference_audios/files，统一转 attachments 透传、由 Lovart 端自识别类型。
+//   **不读** image_with_roles / video_urls / audio_urls / first_frame_url → 首尾帧、参考视频/音频
+//   网关不透传（第三闸会诚实拦截）。图片参考（image_urls）全链路可靠。
+//
+// 参数翻译：seedance-2-apimart 档案 canonical 比例键是 `size`（非 aspect_ratio），body 直接读
+// {{request.params.size}}；resolution 转小写；drop 网关不读的 generate_audio。
 
 import type { HttpOperation, ProfileKind } from "./types";
 import type { ParamMap } from "./paramTranslate";
@@ -19,11 +30,14 @@ const SIZE = "{{request.params.size}}";
 const RESOLUTION = "{{request.params.resolution}}";
 const DURATION = "{{request.params.duration}}";
 const IMAGE_URLS = "{{request.params.image_urls}}";
+const VIDEO_URLS = "{{request.params.video_urls}}";
+const AUDIO_URLS = "{{request.params.audio_urls}}";
+const IMAGE_WITH_ROLES = "{{request.params.image_with_roles}}";
+const SEED = "{{request.params.seed}}";
 
-/** 网关侧统一参数翻译：中性比例 → size；清晰度档位小写；drop 网关不读的 generate_audio。 */
+/** 网关侧统一参数翻译：清晰度档位小写；drop 网关不读的 generate_audio（比例 size 已由档案直接产出）。 */
 const LOVART_VIDEO_PARAM_MAP: ParamMap = {
   rules: [
-    { wire: "size", from: "aspect_ratio" },
     { wire: "resolution", fromMany: ["resolution"], transform: "toLowerCase" },
   ],
   drops: ["generate_audio"],
@@ -77,17 +91,17 @@ function videoModel(p: {
 
 /** Lovart 网关 /v1/models 返回的视频模型（精选子集，单源）。 */
 export const LOVART_VIDEO_MODELS: LovartVideoModel[] = [
-  // Seedance 2.0（标准）：复用 seedance-2 档案（文生/图生两模式；image_urls 图生）。
+  // Seedance 2.0（标准）：用 seedance-2-apimart 档案（图生视频槽 inputKey=image_urls，与网关契约一致）。
   videoModel({
-    modelKey: "seedance-2", labelZh: "Seedance 2.0", archetypeId: "seedance-2",
-    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION },
-    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, image_urls: IMAGE_URLS },
+    modelKey: "seedance-2", labelZh: "Seedance 2.0", archetypeId: "seedance-2-apimart",
+    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, seed: SEED },
+    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, seed: SEED, image_urls: IMAGE_URLS, video_urls: VIDEO_URLS, audio_urls: AUDIO_URLS, image_with_roles: IMAGE_WITH_ROLES },
   }),
-  // Seedance 2.0 Fast：同 seedance-2 档案（Fast 变体已由档案收窄清晰度，这里独立一行）。
+  // Seedance 2.0 Fast：同 seedance-2-apimart 档案（Fast 变体已由档案收窄清晰度，这里独立一行）。
   videoModel({
-    modelKey: "seedance-2.0-fast", labelZh: "Seedance 2.0 Fast", archetypeId: "seedance-2",
-    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION },
-    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, image_urls: IMAGE_URLS },
+    modelKey: "seedance-2.0-fast", labelZh: "Seedance 2.0 Fast", archetypeId: "seedance-2-apimart",
+    t2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, seed: SEED },
+    i2vBody: { size: SIZE, resolution: RESOLUTION, duration: DURATION, seed: SEED, image_urls: IMAGE_URLS, video_urls: VIDEO_URLS, audio_urls: AUDIO_URLS, image_with_roles: IMAGE_WITH_ROLES },
   }),
 ];
 
