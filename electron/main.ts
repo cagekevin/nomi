@@ -57,6 +57,7 @@ import { desktopT, registerI18nIpc, setDesktopLocale } from "./i18n";
 import { registerSettingsIpc } from "./settings/registerSettingsIpc";
 import { registerProductionRunIpc } from "./productionRun/productionRunIpc";
 import { installProductionRunDesktopLifecycle } from "./productionRun/productionRunDesktopLifecycle";
+import { EventChannels, IpcChannels } from "./shared/ipcChannels";
 installMainProcessLifecycle(app);
 const configuredUserDataDir = String(process.env.NOMI_ELECTRON_USER_DATA_DIR || "").trim();
 if (configuredUserDataDir) {
@@ -305,8 +306,8 @@ async function createWindow(
   });
 
   // Windows 自绘标题栏需要知道最大化态来切「最大化/还原」图标。窗口级监听随窗口销毁回收（无泄漏）。
-  mainWindow.on("maximize", () => mainWindow.webContents.send("nomi:window:maximized", true));
-  mainWindow.on("unmaximize", () => mainWindow.webContents.send("nomi:window:maximized", false));
+  mainWindow.on("maximize", () => mainWindow.webContents.send(EventChannels.windowMaximized, true));
+  mainWindow.on("unmaximize", () => mainWindow.webContents.send(EventChannels.windowMaximized, false));
 
   // External http(s) links (e.g. the "get your API key" link → provider console)
   // open in the user's real browser, never as a new in-app Electron window.
@@ -397,60 +398,60 @@ function registerIpc(): void {
   const selectedWorkspaceRoots = new Set<string>();
   registerI18nIpc();
   // 渲染层崩溃（RootErrorBoundary）也落到同一崩溃日志（P0-8）。
-  ipcMain.on("nomi:log:renderer-crash", (_event, message: unknown) => logCrash("renderer", String(message)));
+  ipcMain.on(IpcChannels.logRendererCrash, (_event, message: unknown) => logCrash("renderer", String(message)));
   // 窗口控制（Windows 自绘标题栏）：只注册一次，作用于发起请求的那个窗口（fromWebContents），
   // 而非闭包捕获某个窗口实例——后者会在第二次 createWindow（重开库/activate）时重复注册 handle 抛错、崩窗。
-  ipcMain.handle("nomi:window:minimize", (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());
-  ipcMain.handle("nomi:window:maximize", (event) => {
+  ipcMain.handle(IpcChannels.windowMinimize, (event) => BrowserWindow.fromWebContents(event.sender)?.minimize());
+  ipcMain.handle(IpcChannels.windowMaximize, (event) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     if (!win) return;
     if (win.isMaximized()) win.unmaximize();
     else win.maximize();
   });
-  ipcMain.handle("nomi:window:close", (event) => BrowserWindow.fromWebContents(event.sender)?.close());
-  registerSyncIpc("nomi:projects:list", listProjects);
-  ipcMain.handle("nomi:projects:list-async", () => listProjects());
-  registerSyncIpc("nomi:projects:create", (record: unknown) => {
+  ipcMain.handle(IpcChannels.windowClose, (event) => BrowserWindow.fromWebContents(event.sender)?.close());
+  registerSyncIpc(IpcChannels.projectsList, listProjects);
+  ipcMain.handle(IpcChannels.projectsListAsync, () => listProjects());
+  registerSyncIpc(IpcChannels.projectsCreate, (record: unknown) => {
     if (record && typeof record === "object" && typeof (record as { rootPath?: unknown }).rootPath === "string") {
       throw new Error("Use nomi:workspace:open-folder to create or open folder-backed projects");
     }
     return createProject(record);
   });
-  registerSyncIpc("nomi:projects:read", readProject);
-  ipcMain.handle("nomi:projects:read-async", (_event, projectId: unknown) => readProject(String(projectId || "")));
-  ipcMain.handle("nomi:projects:diagnose", (_event, projectId: unknown) => diagnoseProject(String(projectId || "")));
-  ipcMain.handle("nomi:projects:recover", (_event, projectId: unknown) => recoverProject(String(projectId || "")));
-  registerSyncIpc("nomi:projects:save", saveProject);
-  ipcMain.handle("nomi:projects:save-async", (_event, projectId: unknown, record: unknown) =>
+  registerSyncIpc(IpcChannels.projectsRead, readProject);
+  ipcMain.handle(IpcChannels.projectsReadAsync, (_event, projectId: unknown) => readProject(String(projectId || "")));
+  ipcMain.handle(IpcChannels.projectsDiagnose, (_event, projectId: unknown) => diagnoseProject(String(projectId || "")));
+  ipcMain.handle(IpcChannels.projectsRecover, (_event, projectId: unknown) => recoverProject(String(projectId || "")));
+  registerSyncIpc(IpcChannels.projectsSave, saveProject);
+  ipcMain.handle(IpcChannels.projectsSaveAsync, (_event, projectId: unknown, record: unknown) =>
     saveProject(String(projectId || ""), record),
   );
-  registerSyncIpc("nomi:projects:delete", deleteProject);
-  ipcMain.on("nomi:app:reopen-library-window", (event) => {
+  registerSyncIpc(IpcChannels.projectsDelete, deleteProject);
+  ipcMain.on(IpcChannels.appReopenLibraryWindow, (event) => {
     recreateMainWindowFromSender(event.sender, { preserveRoute: false, reason: "reopen library window" });
   });
-  ipcMain.on("nomi:app:hard-reload-window", (event) => {
+  ipcMain.on(IpcChannels.appHardReloadWindow, (event) => {
     recreateMainWindowFromSender(event.sender, { preserveRoute: true, reason: "hard reload window" });
   });
-  registerSyncIpc("nomi:model-catalog:vendors:list", listModelCatalogVendors);
-  registerSyncIpc("nomi:model-catalog:models:list", (params?: unknown) => {
+  registerSyncIpc(IpcChannels.modelCatalogVendorsList, listModelCatalogVendors);
+  registerSyncIpc(IpcChannels.modelCatalogModelsList, (params?: unknown) => {
     // Renderer 热更新不会重启 Electron main；读取时补一次内置种子，避免 onboarding
     // 长时间停留在旧的持久化目录（例如 APIMart 缺 Grok Imagine 1.5）。
     ensureBuiltinModelSeeds();
     return listModelCatalogModels(params);
   });
-  registerSyncIpc("nomi:model-catalog:mappings:list", listModelCatalogMappings);
-  registerSyncIpc("nomi:model-catalog:health", getModelCatalogHealth);
-  registerSyncIpc("nomi:model-catalog:vendor:upsert", upsertModelCatalogVendor);
-  registerSyncIpc("nomi:model-catalog:vendor:delete", deleteModelCatalogVendor);
-  registerSyncIpc("nomi:model-catalog:vendor-api-key:upsert", upsertModelCatalogVendorApiKey);
-  registerSyncIpc("nomi:model-catalog:vendor-api-key:clear", clearModelCatalogVendorApiKey);
-  registerSyncIpc("nomi:model-catalog:model:upsert", upsertModelCatalogModel);
-  registerSyncIpc("nomi:model-catalog:model:delete", deleteModelCatalogModel);
-  registerSyncIpc("nomi:model-catalog:models:delete", deleteModelCatalogModels);
-  registerSyncIpc("nomi:model-catalog:mapping:upsert", upsertModelCatalogMapping);
-  registerSyncIpc("nomi:model-catalog:mapping:delete", deleteModelCatalogMapping);
-  registerSyncIpc("nomi:model-catalog:export", exportModelCatalogPackage);
-  registerSyncIpc("nomi:model-catalog:import", importModelCatalogPackage);
+  registerSyncIpc(IpcChannels.modelCatalogMappingsList, listModelCatalogMappings);
+  registerSyncIpc(IpcChannels.modelCatalogHealth, getModelCatalogHealth);
+  registerSyncIpc(IpcChannels.modelCatalogVendorUpsert, upsertModelCatalogVendor);
+  registerSyncIpc(IpcChannels.modelCatalogVendorDelete, deleteModelCatalogVendor);
+  registerSyncIpc(IpcChannels.modelCatalogVendorApiKeyUpsert, upsertModelCatalogVendorApiKey);
+  registerSyncIpc(IpcChannels.modelCatalogVendorApiKeyClear, clearModelCatalogVendorApiKey);
+  registerSyncIpc(IpcChannels.modelCatalogModelUpsert, upsertModelCatalogModel);
+  registerSyncIpc(IpcChannels.modelCatalogModelDelete, deleteModelCatalogModel);
+  registerSyncIpc(IpcChannels.modelCatalogModelsDelete, deleteModelCatalogModels);
+  registerSyncIpc(IpcChannels.modelCatalogMappingUpsert, upsertModelCatalogMapping);
+  registerSyncIpc(IpcChannels.modelCatalogMappingDelete, deleteModelCatalogMapping);
+  registerSyncIpc(IpcChannels.modelCatalogExport, exportModelCatalogPackage);
+  registerSyncIpc(IpcChannels.modelCatalogImport, importModelCatalogPackage);
   // ComfyUI 域 IPC（探测/导入/缺件对账）全住 electron/comfyuiIpc.ts（main.ts 800 行门腾空间）。
   const { registerComfyuiIpc } = require("./comfyuiIpc") as typeof import("./comfyuiIpc");
   registerComfyuiIpc(registerSyncIpc);
@@ -461,54 +462,54 @@ function registerIpc(): void {
   // 静态 import 而非惰性 require：该文件只依赖 electron 本身，载入零成本，且不吃 no-require-imports 警告配额。
   registerNotificationIpc();
   // Skill / Playbook 域（业务函数在 electron/skills/*，这里只接同步 IPC 管道）。
-  registerSyncIpc("nomi:skill:list", () => {
+  registerSyncIpc(IpcChannels.skillList, () => {
     const { listSkillsForRenderer } = require("./skills/skillIpc") as typeof import("./skills/skillIpc");
     return listSkillsForRenderer();
   });
-  registerSyncIpc("nomi:skill:export", (dirName: unknown) => {
+  registerSyncIpc(IpcChannels.skillExport, (dirName: unknown) => {
     const { exportSkillPackageByName } = require("./skills/skillPackage") as typeof import("./skills/skillPackage");
     return exportSkillPackageByName(String(dirName || ""), Date.now());
   });
-  registerSyncIpc("nomi:skill:import", (payload: unknown) => {
+  registerSyncIpc(IpcChannels.skillImport, (payload: unknown) => {
     const { importSkillPackageToUserDir } = require("./skills/skillPackage") as typeof import("./skills/skillPackage");
     return importSkillPackageToUserDir(payload);
   });
-  registerSyncIpc("nomi:skill:delete", (dirName: unknown) => {
+  registerSyncIpc(IpcChannels.skillDelete, (dirName: unknown) => {
     const { deleteUserSkill } = require("./skills/skillPackage") as typeof import("./skills/skillPackage");
     return deleteUserSkill(String(dirName || ""));
   });
 
-  ipcMain.handle("nomi:model-catalog:docs:fetch", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.modelCatalogDocsFetch, async (_event, payload) => {
     const { fetchModelCatalogDocs } = await import("./catalog/catalogCommit");
     return fetchModelCatalogDocs(payload);
   });
   // 即梦会员（dreamina CLI）：设备码登录/账户检测/安装（异步，spawn 本地 CLI）。
-  ipcMain.handle("nomi:dreamina:status", async () => {
+  ipcMain.handle(IpcChannels.dreaminaStatus, async () => {
     const { dreaminaStatus } = await import("./catalog/dreaminaLoginIpc");
     return dreaminaStatus();
   });
-  ipcMain.handle("nomi:dreamina:login-start", async () => {
+  ipcMain.handle(IpcChannels.dreaminaLoginStart, async () => {
     const { dreaminaLoginStart } = await import("./catalog/dreaminaLoginIpc");
     return dreaminaLoginStart();
   });
-  ipcMain.handle("nomi:dreamina:login-poll", async (_event, deviceCode: unknown) => {
+  ipcMain.handle(IpcChannels.dreaminaLoginPoll, async (_event, deviceCode: unknown) => {
     const { dreaminaLoginPoll } = await import("./catalog/dreaminaLoginIpc");
     return dreaminaLoginPoll(String(deviceCode || ""));
   });
-  ipcMain.handle("nomi:dreamina:logout", async () => {
+  ipcMain.handle(IpcChannels.dreaminaLogout, async () => {
     const { dreaminaLogout } = await import("./catalog/dreaminaLoginIpc");
     return dreaminaLogout();
   });
-  ipcMain.handle("nomi:dreamina:install", async () => {
+  ipcMain.handle(IpcChannels.dreaminaInstall, async () => {
     const { dreaminaInstall } = await import("./catalog/dreaminaLoginIpc");
     return dreaminaInstall();
   });
-  ipcMain.handle("nomi:workspace:select-folder", async () => {
+  ipcMain.handle(IpcChannels.workspaceSelectFolder, async () => {
     const selection = await selectWorkspaceFolder({ showOpenDialog: (options) => dialog.showOpenDialog(options) });
     if (!selection.canceled) selectedWorkspaceRoots.add(selection.rootPath);
     return selection;
   });
-  ipcMain.handle("nomi:workspace:open-folder", (_event, payload) =>
+  ipcMain.handle(IpcChannels.workspaceOpenFolder, (_event, payload) =>
     openWorkspaceFolder(payload, {
       createProject,
       selectedRootPaths: selectedWorkspaceRoots,
@@ -525,7 +526,7 @@ function registerIpc(): void {
       },
     }),
   );
-  ipcMain.handle("nomi:workspace:list-files", (_event, payload) => {
+  ipcMain.handle(IpcChannels.workspaceListFiles, (_event, payload) => {
     const projectId = String((payload as { projectId?: unknown } | null)?.projectId || "").trim();
     if (!projectId) throw new Error("projectId is required");
     const project = readProject(projectId) as { lastKnownRootPath?: unknown } | null;
@@ -539,7 +540,7 @@ function registerIpc(): void {
           : undefined,
     });
   });
-  ipcMain.handle("nomi:workspace:reveal-file", (_event, payload) => {
+  ipcMain.handle(IpcChannels.workspaceRevealFile, (_event, payload) => {
     const projectId = String((payload as { projectId?: unknown } | null)?.projectId || "").trim();
     const relativePath = String((payload as { relativePath?: unknown } | null)?.relativePath || "").trim();
     if (!projectId) throw new Error("projectId is required");
@@ -551,7 +552,7 @@ function registerIpc(): void {
     return { ok: true };
   });
   registerWorkspaceFileDeleteIpc({ readProject });
-  ipcMain.handle("nomi:workspace:reveal-project-folder", (_event, payload) => {
+  ipcMain.handle(IpcChannels.workspaceRevealProjectFolder, (_event, payload) => {
     const projectId = String((payload as { projectId?: unknown } | null)?.projectId || "").trim();
     if (!projectId) throw new Error("projectId is required");
     const project = readProject(projectId) as { lastKnownRootPath?: unknown } | null;
@@ -560,44 +561,44 @@ function registerIpc(): void {
     void shell.openPath(rootPath);
     return { ok: true };
   });
-  ipcMain.handle("nomi:model-catalog:mapping:test", async (_event, id, payload) => {
+  ipcMain.handle(IpcChannels.modelCatalogMappingTest, async (_event, id, payload) => {
     const { testModelCatalogMapping } = await import("./catalog/catalogCommit");
     return testModelCatalogMapping(id, payload);
   });
-  ipcMain.handle("nomi:assets:import-remote-url", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.assetsImportRemoteUrl, async (_event, payload) => {
     const { importRemoteAsset } = await loadRuntimeModule();
     return importRemoteAsset(payload);
   });
-  ipcMain.handle("nomi:assets:list", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.assetsList, async (_event, payload) => {
     const { listProjectAssets } = await loadRuntimeModule();
     return listProjectAssets(payload);
   });
   registerAssetsIpc();
   registerSettingsIpc();
-  ipcMain.handle("nomi:video:extract-frame", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.videoExtractFrame, async (_event, payload) => {
     const { extractVideoFrameToAsset } = await import("./video/extractVideoFrame");
     return extractVideoFrameToAsset(payload);
   });
-  ipcMain.handle("nomi:video:extract-filmstrip", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.videoExtractFilmstrip, async (_event, payload) => {
     const { extractVideoFilmstripToAsset } = await import("./video/extractVideoFrame");
     return extractVideoFilmstripToAsset(payload);
   });
   registerScreenshotIpc();
-  ipcMain.handle("nomi:video:detect-shot-cuts", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.videoDetectShotCuts, async (_event, payload) => {
     const { detectShotCuts } = await import("./video/detectShotCuts");
     return detectShotCuts(payload);
   });
-  ipcMain.handle("nomi:image:decompose-layers", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.imageDecomposeLayers, async (_event, payload) => {
     const { decomposeLayers } = await import("./image/decomposeLayers");
     return decomposeLayers(payload);
   });
-  ipcMain.handle("nomi:scene3d:frames-to-video", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.scene3dFramesToVideo, async (_event, payload) => {
     const { framesToVideoAsset } = await import("./video/framesToVideo");
     return framesToVideoAsset(payload);
   });
   registerExportJobIpc();
   // 付费守卫铸令牌：仅由渲染层「真人确认」事件链调用（务实纵深：铸造面小而审计过 + 主进程硬闸兜底）。
-  ipcMain.handle("nomi:tasks:grant-spend", (_event, payload) => {
+  ipcMain.handle(IpcChannels.tasksGrantSpend, (_event, payload) => {
     const raw = (payload || {}) as { nodeIds?: unknown; maxAttemptsPerNode?: unknown };
     const nodeIds = Array.isArray(raw.nodeIds) ? raw.nodeIds.map((id) => String(id)) : [];
     const maxAttemptsPerNode = typeof raw.maxAttemptsPerNode === "number" ? raw.maxAttemptsPerNode : undefined;
@@ -605,13 +606,13 @@ function registerIpc(): void {
   });
   // 提交幂等包在 IPC 边界：渲染层每次提交（含控制器重试）都经此，同 idempotencyKey 的提交内核 at-most-once
   // （堵「提交瞬间丢回执 → 重试 → 二次下单」；query 类 nomi:tasks:result 不包，查结果本就免费）。
-  ipcMain.handle("nomi:tasks:run", (_event, payload) =>
+  ipcMain.handle(IpcChannels.tasksRun, (_event, payload) =>
     runTaskIpcGuard(payload, async () => {
       const { runTask } = await loadRuntimeModule();
       return runTaskWithIdempotency(payload, () => runTask(payload));
     }),
   );
-  ipcMain.handle("nomi:tasks:result", (_event, payload) =>
+  ipcMain.handle(IpcChannels.tasksResult, (_event, payload) =>
     runTaskIpcGuard(payload, async () => {
       const { fetchTaskResult } = await loadRuntimeModule();
       return fetchTaskResult(payload);
@@ -619,15 +620,15 @@ function registerIpc(): void {
   );
   // 能力核 A/B 守卫：renderer 在打开/切换/关闭项目时上报当前打开的 projectId，
   // 让外部调用拒绝直写「正在窗口里编辑」的工程（防内存 store 回盘覆盖，见 capabilityCore/rpcServer）。
-  ipcMain.on("nomi:capability:active-project", (_event, projectId: unknown) =>
+  ipcMain.on(IpcChannels.capabilityActiveProject, (_event, projectId: unknown) =>
     setActiveCapabilityProject(String(projectId || "")),
   );
   // 「接入 AI 编程助手」卡：读接入状态/配置片段 + 一键写入/撤销 ~/.claude.json 的 mcpServers.nomi。
-  registerSyncIpc("nomi:capability:mcp-info", () => readMcpInfo(getActiveCapabilityPort()));
-  registerSyncIpc("nomi:capability:mcp-install", installMcp);
-  registerSyncIpc("nomi:capability:mcp-uninstall", uninstallMcp);
+  registerSyncIpc(IpcChannels.capabilityMcpInfo, () => readMcpInfo(getActiveCapabilityPort()));
+  registerSyncIpc(IpcChannels.capabilityMcpInstall, installMcp);
+  registerSyncIpc(IpcChannels.capabilityMcpUninstall, uninstallMcp);
   // 实连验证（异步：真起一次配置里那条命令握手）。「配置里有这行字」≠「还连得上」，见 mcpVerify 头注释。
-  ipcMain.handle("nomi:capability:mcp-verify", (_event, client: unknown) => verifyMcp(typeof client === "string" ? client : undefined));
+  ipcMain.handle(IpcChannels.capabilityMcpVerify, (_event, client: unknown) => verifyMcp(typeof client === "string" ? client : undefined));
   registerAgentChatV2Ipc();
   registerTextStreamIpc();
   registerConversationsIpc();
