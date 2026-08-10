@@ -47,11 +47,19 @@ export function publishBroadcast<C extends EventChannel>(
   channel: C,
   payload: EventMap[ChannelToKey<C>],
 ): void {
-  void import("electron").then(({ BrowserWindow }) => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send(channel, payload);
-    }
-  });
+  // fire-and-forget：广播只是「通知窗口刷新」，环境不对就静默 no-op，绝不让它崩或报错。
+  // vitest 纯 node / mock 缺 BrowserWindow 都会走到这里——import 本身可能 reject，
+  // .then 回调里 BrowserWindow 也可能为 undefined；两种都 catch 掉，保证不进 unhandled rejection。
+  void import("electron")
+    .then(({ BrowserWindow }) => {
+      if (!BrowserWindow) return;
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) win.webContents.send(channel, payload);
+      }
+    })
+    .catch(() => {
+      /* 环境不支持窗口广播时静默跳过（见 assetEvents.broadcastAssetsUpdated 注释）。 */
+    });
 }
 
 /** 定向发送到指定 webContents。 */
