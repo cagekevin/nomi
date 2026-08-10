@@ -6,15 +6,16 @@
 //   text: {type:'progress',data:{value,max,prompt_id,node}} / {type:'executing',data:{node|null,prompt_id}}
 //         {type:'execution_cached',data:{nodes[],prompt_id}} / {type:'status',...}
 //   binary: [>I event][payload]；event 1=PREVIEW_IMAGE → [>I 1=JPEG|2=PNG][图字节]
-// 推送渠道：webContents.send("nomi:tasks:comfyui:progress")（镜像 textStreamIpc 单向事件范式；
+// 推送渠道：webContents.send(EventChannels.tasksComfyuiProgress)（镜像 textStreamIpc 单向事件范式；
 // 高频瞬态，刻意不进 EventLog、不进持久化 result）。
 // prompt_id→node 注册表是本模块唯一的数据结构缺口补齐：渲染层提交拿到 prompt_id 后经 watch IPC 登记。
 import { webContents } from "electron";
 import { WebSocket } from "undici";
 import { readCatalog } from "./catalog/catalogStore";
 import { COMFYUI_VENDOR_KEY, isComfyuiVendor } from "./catalog/types";
+import { EventChannels } from "./shared/ipcChannels";
 
-export const COMFYUI_PROGRESS_CHANNEL = "nomi:tasks:comfyui:progress";
+export const COMFYUI_PROGRESS_CHANNEL = EventChannels.tasksComfyuiProgress;
 
 export type ComfyuiProgressEvent = {
   promptId: string;

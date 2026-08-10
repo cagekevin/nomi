@@ -3,9 +3,10 @@
 import { ipcMain } from "electron";
 import { appendEvents, readEvents } from "./eventLogRepository";
 import type { NewNomiEvent } from "./types";
+import { IpcChannels } from "../shared/ipcChannels";
 
 export function registerEventsIpc(): void {
-  ipcMain.handle("nomi:events:append", async (_event, payload: { projectId?: string; events?: unknown }) => {
+  ipcMain.handle(IpcChannels.eventsAppend, async (_event, payload: { projectId?: string; events?: unknown }) => {
     const projectId = String(payload?.projectId || "");
     const events = Array.isArray(payload?.events) ? (payload.events as NewNomiEvent[]) : [];
     const written = appendEvents(projectId, events);
@@ -14,7 +15,7 @@ export function registerEventsIpc(): void {
   });
 
   // S5-b-1:hydrate 尾部重放 + 轨迹查看的读口(sidecar 已在仓库层还原)
-  ipcMain.handle("nomi:events:read", async (_event, payload: { projectId?: string; fromSeq?: number }) => {
+  ipcMain.handle(IpcChannels.eventsRead, async (_event, payload: { projectId?: string; fromSeq?: number }) => {
     const projectId = String(payload?.projectId || "");
     const fromSeq = Number(payload?.fromSeq) || 0;
     return { ok: true, events: readEvents(projectId, { fromSeq }) };

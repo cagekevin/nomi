@@ -2,11 +2,12 @@ import { ipcMain, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { resolveWorkspaceFilePath } from "./workspaceFileIndex";
+import { IpcChannels } from "../shared/ipcChannels";
 
 type ProjectReader = (projectId: string) => unknown | null;
 
 export function registerWorkspaceFileDeleteIpc({ readProject }: { readProject: ProjectReader }): void {
-  ipcMain.handle("nomi:workspace:delete-files", async (_event, payload) => {
+  ipcMain.handle(IpcChannels.workspaceDeleteFiles, async (_event, payload) => {
     const projectId = String((payload as { projectId?: unknown } | null)?.projectId || "").trim();
     const rawRelativePaths = (payload as { relativePaths?: unknown } | null)?.relativePaths;
     const relativePaths = Array.isArray(rawRelativePaths)

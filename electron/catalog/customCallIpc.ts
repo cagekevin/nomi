@@ -2,6 +2,7 @@
 // 三条通道：契约（编辑器变量表/模板）、AI 生成指令（主进程拼好给渲染层文本脑）、试跑（真调）。
 import { ipcMain } from "electron";
 import { trim } from "../jsonUtils";
+import { IpcChannels } from "../shared/ipcChannels";
 import {
   buildCustomCallAiInstruction,
   CUSTOM_CALL_TEMPLATES,
@@ -39,12 +40,12 @@ function cannedTestInput(kind: string): { prompt: string; params: Record<string,
 }
 
 export function registerCustomCallIpc(registerSyncIpc: (channel: string, handler: (...args: never[]) => unknown) => void): void {
-  registerSyncIpc("nomi:model-catalog:custom-call:contract", () => ({
+  registerSyncIpc(IpcChannels.customCallContract, () => ({
     variables: CUSTOM_CALL_VARIABLES.map((v) => ({ name: v.name, type: v.type })),
     templates: CUSTOM_CALL_TEMPLATES,
   }));
 
-  registerSyncIpc("nomi:model-catalog:custom-call:ai-instruction", ((payload: unknown) => {
+  registerSyncIpc(IpcChannels.customCallAiInstruction, ((payload: unknown) => {
     const raw = (payload || {}) as Record<string, unknown>;
     const vendorKey = trim(raw.vendorKey);
     const modelKey = trim(raw.modelKey);
@@ -59,7 +60,7 @@ export function registerCustomCallIpc(registerSyncIpc: (channel: string, handler
     });
   }) as (...args: never[]) => unknown);
 
-  ipcMain.handle("nomi:model-catalog:custom-call:test-run", async (_event, payload): Promise<CustomCallTestRunResult> => {
+  ipcMain.handle(IpcChannels.customCallTestRun, async (_event, payload): Promise<CustomCallTestRunResult> => {
     const raw = (payload || {}) as Record<string, unknown>;
     const vendorKey = trim(raw.vendorKey);
     const modelKey = trim(raw.modelKey);

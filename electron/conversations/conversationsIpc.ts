@@ -7,6 +7,7 @@ import { ipcMain } from "electron";
 import { writeJsonFileAtomic } from "../jsonFile";
 import { getWorkspaceRepositoryDeps } from "../runtimePaths";
 import { resolveWorkspaceProjectDir } from "../workspace/workspaceRepository";
+import { IpcChannels } from "../shared/ipcChannels";
 import {
   normalizeToV2,
   sanitizeArea,
@@ -20,7 +21,7 @@ function conversationsPath(projectId: string): string | null {
 }
 
 export function registerConversationsIpc(): void {
-  ipcMain.handle("nomi:conversations:read", async (_event, payload: { projectId?: string }) => {
+  ipcMain.handle(IpcChannels.conversationsRead, async (_event, payload: { projectId?: string }) => {
     try {
       const filePath = conversationsPath(String(payload?.projectId || ""));
       if (!filePath || !fs.existsSync(filePath)) return { ok: true, conversations: null };
@@ -32,7 +33,7 @@ export function registerConversationsIpc(): void {
   });
 
   ipcMain.handle(
-    "nomi:conversations:write",
+    IpcChannels.conversationsWrite,
     async (
       _event,
       payload: { projectId?: string; creation?: unknown; generation?: unknown; committedProposal?: unknown },

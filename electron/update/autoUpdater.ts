@@ -1,5 +1,6 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import { desktopT } from "../i18n";
+import { EventChannels, IpcChannels } from "../shared/ipcChannels";
 
 // 版本号 + 检查更新 + 一键更新（功能需求 1/2/3）。
 // GitHub Releases provider 由 package.json build.publish 自动派生，无需额外服务器。
@@ -16,7 +17,7 @@ type AppInfo = {
   canAutoInstall: boolean;
 };
 
-const EVENT_CHANNEL = "nomi:update:event";
+const EVENT_CHANNEL = EventChannels.updateEvent;
 
 // 手动更新兜底落地页：GitHub 最新 release。
 const RELEASE_PAGE_URL = "https://github.com/aqm857886159/Nomi/releases/latest";
@@ -80,7 +81,7 @@ async function loadAutoUpdater(): Promise<typeof import("electron-updater")["aut
 }
 
 export function registerUpdaterIpc(): void {
-  ipcMain.handle("nomi:app:version", (): AppInfo => ({
+  ipcMain.handle(IpcChannels.appVersion, (): AppInfo => ({
     version: app.getVersion(),
     platform: process.platform,
     arch: process.arch,
@@ -88,7 +89,7 @@ export function registerUpdaterIpc(): void {
   }));
 
   // 手动更新兜底：在浏览器打开 GitHub 最新 release，用户自行下载安装包重装。
-  ipcMain.handle("nomi:update:open-release", async () => {
+  ipcMain.handle(IpcChannels.updateOpenRelease, async () => {
     try {
       await shell.openExternal(RELEASE_PAGE_URL);
       return { ok: true };
@@ -98,7 +99,7 @@ export function registerUpdaterIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:update:check", async () => {
+  ipcMain.handle(IpcChannels.updateCheck, async () => {
     // 未打包（dev）时 electron-updater 不可用——诚实回错，不假装能更新。
     if (!app.isPackaged) {
       broadcast({ type: "error", message: desktopT("updater.devUnavailable") });
@@ -114,7 +115,7 @@ export function registerUpdaterIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:update:download", async () => {
+  ipcMain.handle(IpcChannels.updateDownload, async () => {
     try {
       const autoUpdater = await loadAutoUpdater();
       await autoUpdater.downloadUpdate();
@@ -125,7 +126,7 @@ export function registerUpdaterIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:update:install", () => {
+  ipcMain.handle(IpcChannels.updateInstall, () => {
     // 立即重启并安装（非静默）。mac 未签名会被 Gatekeeper 拦——降级实况以真机为准。
     setImmediate(() => {
       try {

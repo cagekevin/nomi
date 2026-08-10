@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import type { AdapterAuthType } from "./types";
+import { IpcChannels } from "../shared/ipcChannels";
 import {
   getProviderAdapterService,
   type ProviderAdapterService,
@@ -46,19 +47,19 @@ function adapterStartInput(payload: unknown): ProviderAdapterStartInput {
 }
 
 export function registerProviderAdapterIpc(service: ProviderAdapterService = getProviderAdapterService()): void {
-  ipcMain.handle("nomi:provider-adapter:start", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.providerAdapterStart, async (_event, payload: unknown) => {
     try {
       return { ok: true, run: service.start(adapterStartInput(payload)) };
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) };
     }
   });
-  ipcMain.handle("nomi:provider-adapter:get", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.providerAdapterGet, async (_event, payload: unknown) => {
     const runId = String((payload as { runId?: unknown } | null)?.runId || "").trim();
     const run = runId ? service.getRun(runId) : undefined;
     return run ? { ok: true, run } : { ok: false, error: "Provider adapter run not found" };
   });
-  ipcMain.handle("nomi:provider-adapter:latest", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.providerAdapterLatest, async (_event, payload: unknown) => {
     const vendorKey = String((payload as { vendorKey?: unknown } | null)?.vendorKey || "").trim();
     const run = vendorKey ? service.latestRun(vendorKey) : undefined;
     return run ? { ok: true, run } : { ok: false, error: "Provider adapter run not found" };

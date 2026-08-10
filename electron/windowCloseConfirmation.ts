@@ -1,5 +1,6 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
+import { EventChannels, IpcChannels } from "./shared/ipcChannels";
 
 const windowsAllowedToClose = new WeakSet<BrowserWindow>();
 const pendingCloseRequests = new WeakMap<BrowserWindow, string>();
@@ -15,7 +16,7 @@ function parseCloseResponse(payload: unknown): { requestId: string; confirmed: b
 function registerCloseResponseIpc(): void {
   if (closeResponseIpcRegistered) return;
   closeResponseIpcRegistered = true;
-  ipcMain.on("nomi:window:close-response", (event, payload: unknown) => {
+  ipcMain.on(IpcChannels.windowCloseResponse, (event, payload: unknown) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
     const response = parseCloseResponse(payload);
     if (!mainWindow || !response) return;
@@ -42,7 +43,7 @@ export function installWindowCloseConfirmation(mainWindow: BrowserWindow): void 
     const requestId = randomUUID();
     pendingCloseRequests.set(mainWindow, requestId);
     mainWindow.focus();
-    mainWindow.webContents.send("nomi:window:close-request", { requestId });
+    mainWindow.webContents.send(EventChannels.windowCloseRequest, { requestId });
   });
   mainWindow.on("closed", () => {
     pendingCloseRequests.delete(mainWindow);

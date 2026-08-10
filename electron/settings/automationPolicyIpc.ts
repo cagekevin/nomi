@@ -1,4 +1,5 @@
 import { ipcMain } from "electron";
+import { IpcChannels } from "../shared/ipcChannels";
 
 import {
   readAutomationPolicySettings,
@@ -17,6 +18,6 @@ export function registerAutomationPolicyIpc(
     write: writeAutomationPolicySettings,
   },
 ): void {
-  ipcMain.handle("nomi:settings:automation-policy-get", async () => store.read());
-  ipcMain.handle("nomi:settings:automation-policy-set", async (_event, payload: unknown) => store.write(payload));
+  ipcMain.handle(IpcChannels.settingsAutomationPolicyGet, async () => store.read());
+  ipcMain.handle(IpcChannels.settingsAutomationPolicySet, async (_event, payload: unknown) => store.write(payload));
 }

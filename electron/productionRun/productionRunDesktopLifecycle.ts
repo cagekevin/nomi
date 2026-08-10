@@ -5,6 +5,7 @@ import { getMainWindow } from "../mainWindowRegistry";
 import { loadOrCreateArtifactPreviewSecret } from "./artifactProjection";
 import { resolveProductionDeepLink, type ProductionDeepLinkTarget } from "./productionDeepLink";
 import { createProductionRunRepository } from "./productionRunRepository";
+import { EventChannels } from "../shared/ipcChannels";
 
 type InstallArgs = {
   isMcpStdio: boolean;
@@ -27,7 +28,7 @@ export function installProductionRunDesktopLifecycle(args: InstallArgs): {
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
-    window.webContents.send("nomi:production-deep-link", target);
+    window.webContents.send(EventChannels.productionDeepLink, target);
   }
 
   function handleProductionDeepLink(rawUrl: string): void {

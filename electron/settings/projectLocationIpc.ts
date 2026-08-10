@@ -7,6 +7,7 @@ import { ensureDir, getProjectLocationState, type ProjectLocationState } from ".
 import { backfillWorkspaceOrigins } from "../workspace/workspaceRegistry";
 import { writeProjectsRoot } from "./projectLocationSettings";
 import { getSettingsRoot } from "./settingsRoot";
+import { IpcChannels } from "../shared/ipcChannels";
 
 export type ProjectLocationError =
   | "not-directory"
@@ -134,8 +135,8 @@ export async function revealProjectLocation(
 }
 
 export function registerProjectLocationIpc(): void {
-  ipcMain.handle("nomi:settings:project-location-get", () => getProjectLocationResponse());
-  ipcMain.handle("nomi:settings:project-location-pick", () => pickProjectLocation());
-  ipcMain.handle("nomi:settings:project-location-reset", () => resetProjectLocation());
-  ipcMain.handle("nomi:settings:project-location-reveal", () => revealProjectLocation());
+  ipcMain.handle(IpcChannels.settingsProjectLocationGet, () => getProjectLocationResponse());
+  ipcMain.handle(IpcChannels.settingsProjectLocationPick, () => pickProjectLocation());
+  ipcMain.handle(IpcChannels.settingsProjectLocationReset, () => resetProjectLocation());
+  ipcMain.handle(IpcChannels.settingsProjectLocationReveal, () => revealProjectLocation());
 }

@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { webContents as electronWebContents } from "electron";
 import { appendEvents } from "../events/eventLogRepository";
 import { runTechnicalCheck } from "./technicalCheck";
+import { EventChannels } from "../shared/ipcChannels";
 
 export function scheduleTechnicalReview(input: {
   projectId: string;
@@ -33,7 +34,7 @@ export function scheduleTechnicalReview(input: {
       // 广播给所有窗口:渲染层把 verdict 写进节点 meta(⚠ 投影的数据源)。
       for (const contents of electronWebContents.getAllWebContents()) {
         if (!contents.isDestroyed()) {
-          contents.send("nomi:review:event", { projectId: input.projectId, nodeId: input.nodeId || "", verdict });
+          contents.send(EventChannels.reviewEvent, { projectId: input.projectId, nodeId: input.nodeId || "", verdict });
         }
       }
     } catch (error) {

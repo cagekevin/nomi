@@ -3,9 +3,10 @@
 import { ipcMain } from "electron";
 import { getPromptLibrary } from "./promptLibraryStore";
 import { addUserPrompt, deleteUserPrompt, listUserPrompts, updateUserPrompt } from "./userPromptStore";
+import { IpcChannels } from "../shared/ipcChannels";
 
 export function registerPromptLibraryIpc(): void {
-  ipcMain.handle("nomi:prompt-library:list", async () => {
+  ipcMain.handle(IpcChannels.promptLibraryList, async () => {
     try {
       const prompts = await getPromptLibrary();
       return { ok: true, prompts };
@@ -15,7 +16,7 @@ export function registerPromptLibraryIpc(): void {
   });
 
   // —— 我的库(用户级) ——
-  ipcMain.handle("nomi:prompt-library:user-list", async () => {
+  ipcMain.handle(IpcChannels.promptLibraryUserList, async () => {
     try {
       return { ok: true, prompts: listUserPrompts() };
     } catch (error) {
@@ -23,7 +24,7 @@ export function registerPromptLibraryIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:prompt-library:user-add", async (_e, input: { title?: string; prompt: string; promptType: "image" | "video"; tags?: string[]; referenceImages?: { url: string; title?: string; sourceUrl?: string }[] }) => {
+  ipcMain.handle(IpcChannels.promptLibraryUserAdd, async (_e, input: { title?: string; prompt: string; promptType: "image" | "video"; tags?: string[]; referenceImages?: { url: string; title?: string; sourceUrl?: string }[] }) => {
     try {
       addUserPrompt(input);
       return { ok: true, prompts: listUserPrompts() };
@@ -32,7 +33,7 @@ export function registerPromptLibraryIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:prompt-library:user-update", async (_e, payload: { id: string; patch: { title?: string; prompt?: string; promptType?: "image" | "video" } }) => {
+  ipcMain.handle(IpcChannels.promptLibraryUserUpdate, async (_e, payload: { id: string; patch: { title?: string; prompt?: string; promptType?: "image" | "video" } }) => {
     try {
       return { ok: true, prompts: updateUserPrompt(payload.id, payload.patch) };
     } catch (error) {
@@ -40,7 +41,7 @@ export function registerPromptLibraryIpc(): void {
     }
   });
 
-  ipcMain.handle("nomi:prompt-library:user-delete", async (_e, payload: { id: string }) => {
+  ipcMain.handle(IpcChannels.promptLibraryUserDelete, async (_e, payload: { id: string }) => {
     try {
       return { ok: true, prompts: deleteUserPrompt(payload.id) };
     } catch (error) {
@@ -49,7 +50,7 @@ export function registerPromptLibraryIpc(): void {
   });
 
   // 节点提示词优化用的文本大脑(vendor/modelKey,不含 apiKey)——渲染层据此走现成文本流式管线。
-  ipcMain.handle("nomi:prompt-library:text-brain", async () => {
+  ipcMain.handle(IpcChannels.promptLibraryTextBrain, async () => {
     const { resolveTextBrainKeys } = await import("../ai/agentChatV2");
     const brain = resolveTextBrainKeys();
     return { ok: Boolean(brain), brain };

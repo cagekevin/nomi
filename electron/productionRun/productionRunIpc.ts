@@ -4,6 +4,7 @@ import { createProductionRunRepository, type ProductionRunRepository } from "./p
 import { getProductionRunService } from "./productionRunRuntime";
 import type { ProductionRunService } from "./productionRunService";
 import type { CreateProductionRunInput, RunCommand } from "./productionRunTypes";
+import { IpcChannels } from "../shared/ipcChannels";
 
 const RENDERER_COMMAND_TYPES = new Set(["run.status", "gate.decide", "artifact.adopt", "plan.attach", "policy.refresh", "job.reconcile"]);
 
@@ -132,19 +133,19 @@ export function registerProductionRunIpc(
   const repository: ProductionRunRepository | null = service ? null : (repositoryOrService as ProductionRunRepository || createProductionRunRepository());
   const read = (projectId: string, runId: string) => service ? service.readFull(projectId, runId) : repository!.read(projectId, runId);
   const list = (projectId: string) => repository ? repository.list(projectId) : service!.listFull(projectId);
-  ipcMain.handle("nomi:production-runs:list", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.productionRunsList, async (_event, payload: unknown) => {
     const raw = objectValue(payload, "production run list request");
     return list(identifier(raw.projectId, "project"));
   });
-  ipcMain.handle("nomi:production-runs:read", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.productionRunsRead, async (_event, payload: unknown) => {
     const { projectId, runId } = projectRunPayload(payload);
     const run = read(projectId, runId);
     if (run && run.projectId !== projectId) throw new Error("Production run project mismatch");
     return run;
   });
-  ipcMain.handle("nomi:production-runs:create-draft", async (_event, payload: unknown) =>
+  ipcMain.handle(IpcChannels.productionRunsCreateDraft, async (_event, payload: unknown) =>
     service ? service.createDraft(createDraftInput(payload)) : repository!.create(createDraftInput(payload)));
-  ipcMain.handle("nomi:production-runs:command", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.productionRunsCommand, async (_event, payload: unknown) => {
     const { projectId, runId, raw } = projectRunPayload(payload);
     if (service) {
       if (!read(projectId, runId)) throw new Error(`Production run not found: ${runId}`);
@@ -153,7 +154,7 @@ export function registerProductionRunIpc(
     assertProjectRun(repository!, projectId, runId);
     return repository!.execute(projectId, runId, rendererCommand(raw.command));
   });
-  ipcMain.handle("nomi:production-runs:events", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.productionRunsEvents, async (_event, payload: unknown) => {
     const { projectId, runId, raw } = projectRunPayload(payload);
     if (!read(projectId, runId)) throw new Error(`Production run not found: ${runId}`);
     const cursor = raw.afterCursor === undefined ? 0 : Number(raw.afterCursor);

@@ -1,3 +1,5 @@
+import { EventChannels } from "../shared/ipcChannels";
+
 // 素材写入层的回流广播：writeAsset/moveAssetFile 落盘后通知所有窗口刷新。
 // 为什么在写入层而不是各导入入口：入口会不断新增（捕捞/拖拽/上传/agent/MCP），
 // 写入层是唯一咽喉，挂在这里整类导入路径免费获得「素材库面板/素材盒徽章」回流
@@ -8,7 +10,7 @@ export function broadcastAssetsUpdated(projectId: string): void {
   void import("electron")
     .then(({ BrowserWindow }) => {
       for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send("nomi:assets:updated", { projectId });
+        if (!win.isDestroyed()) win.webContents.send(EventChannels.assetsUpdated, { projectId });
       }
     })
     .catch(() => {

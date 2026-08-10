@@ -5,6 +5,7 @@
 // 支持 cancel（AbortController 真中断流，不只是置标志）。
 import { ipcMain, webContents as electronWebContents } from "electron";
 import type { WebContents } from "electron";
+import { EventChannels, IpcChannels } from "../shared/ipcChannels";
 
 type TextStreamSession = {
   streamId: string;
@@ -23,11 +24,11 @@ function loadTextTaskRunner(): Promise<typeof import("../textTaskRunner")> {
 function sendTextEvent(session: TextStreamSession, event: unknown): void {
   const target: WebContents | undefined = electronWebContents.fromId(session.webContentsId) || undefined;
   if (!target || target.isDestroyed()) return;
-  target.send("nomi:tasks:text:event", { streamId: session.streamId, event });
+  target.send(EventChannels.tasksTextEvent, { streamId: session.streamId, event });
 }
 
 export function registerTextStreamIpc(): void {
-  ipcMain.handle("nomi:tasks:text:stream", async (event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.tasksTextStream, async (event, payload: Record<string, unknown>) => {
     const streamId = `text-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const session: TextStreamSession = {
       streamId,
@@ -69,7 +70,7 @@ export function registerTextStreamIpc(): void {
     return { streamId };
   });
 
-  ipcMain.handle("nomi:tasks:text:cancel", async (_event, payload: { streamId?: string }) => {
+  ipcMain.handle(IpcChannels.tasksTextCancel, async (_event, payload: { streamId?: string }) => {
     const session = textStreamSessions.get(String(payload?.streamId || ""));
     if (!session) return { ok: false, error: "stream not found" };
     session.abortController.abort();

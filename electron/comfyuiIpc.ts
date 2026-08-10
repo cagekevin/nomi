@@ -15,36 +15,37 @@ import { readCatalog } from "./catalog/catalogStore";
 import { COMFYUI_VENDOR_KEY } from "./catalog/types";
 import { listComfyuiPresets } from "./catalog/comfyuiPresets";
 import { interruptComfyuiTask, unwatchComfyuiTask, watchComfyuiTask } from "./comfyuiProgressSocket";
+import { IpcChannels } from "./shared/ipcChannels";
 
 type RegisterSyncIpc = (channel: string, handler: (...args: unknown[]) => unknown) => void;
 
 export function registerComfyuiIpc(registerSyncIpc: RegisterSyncIpc): void {
   // 健康探测（接入卡启用/重检调用；直连 localhost /system_stats，不走系统代理）。
-  ipcMain.handle("nomi:model-catalog:comfyui:probe", (_event, baseUrl: unknown) => probeComfyuiSystemStats(String(baseUrl || "")));
+  ipcMain.handle(IpcChannels.modelCatalogComfyuiProbe, (_event, baseUrl: unknown) => probeComfyuiSystemStats(String(baseUrl || "")));
   // 自定义 workflow 导入（S3）：analyze 同步纯解析；reconcile 异步问本机 /object_info 对账缺节点/缺模型；
   // import/update 落库为用户自有 model+mapping。
-  registerSyncIpc("nomi:model-catalog:comfyui:analyze-workflow", (text: unknown) => analyzeComfyWorkflowText(text));
+  registerSyncIpc(IpcChannels.modelCatalogComfyuiAnalyzeWorkflow, (text: unknown) => analyzeComfyWorkflowText(text));
   // 智能分析（T1）：界面格式自动借 ComfyUI 前端转 API 再分析——用户贴什么格式都吃。
-  ipcMain.handle("nomi:model-catalog:comfyui:analyze-workflow-smart", (_e, text: unknown, vendorKey: unknown) =>
+  ipcMain.handle(IpcChannels.modelCatalogComfyuiAnalyzeWorkflowSmart, (_e, text: unknown, vendorKey: unknown) =>
     analyzeComfyWorkflowTextSmart(text, vendorKey));
-  ipcMain.handle("nomi:model-catalog:comfyui:reconcile-workflow", (_event, text: unknown, vendorKey: unknown) => reconcileComfyWorkflowText(text, vendorKey));
-  registerSyncIpc("nomi:model-catalog:comfyui:import-workflow", (payload: unknown) => importComfyWorkflowToCatalog(payload));
-  registerSyncIpc("nomi:model-catalog:comfyui:update-workflow", (payload: unknown) => updateComfyWorkflowInCatalog(payload));
+  ipcMain.handle(IpcChannels.modelCatalogComfyuiReconcileWorkflow, (_event, text: unknown, vendorKey: unknown) => reconcileComfyWorkflowText(text, vendorKey));
+  registerSyncIpc(IpcChannels.modelCatalogComfyuiImportWorkflow, (payload: unknown) => importComfyWorkflowToCatalog(payload));
+  registerSyncIpc(IpcChannels.modelCatalogComfyuiUpdateWorkflow, (payload: unknown) => updateComfyWorkflowInCatalog(payload));
   // 预置模板（S5）：静态清单，启用前经 reconcile 缺件闸、启用走既有 import 链。
-  registerSyncIpc("nomi:model-catalog:comfyui:presets", () => listComfyuiPresets());
+  registerSyncIpc(IpcChannels.modelCatalogComfyuiPresets, () => listComfyuiPresets());
   // 模板库（T2）：读**用户自己 ComfyUI 里的**官方模板（几百个），我们零维护。
   const comfyBaseUrl = (vendorKey: unknown): string => {
     const key = String(vendorKey || "").trim() || COMFYUI_VENDOR_KEY;
     return String(readCatalog().vendors.find((v) => v.key === key)?.baseUrlHint || "");
   };
-  ipcMain.handle("nomi:model-catalog:comfyui:templates", (_e, vendorKey: unknown) =>
+  ipcMain.handle(IpcChannels.modelCatalogComfyuiTemplates, (_e, vendorKey: unknown) =>
     fetchComfyuiTemplates(comfyBaseUrl(vendorKey)));
-  ipcMain.handle("nomi:model-catalog:comfyui:template-detail", (_e, name: unknown, vendorKey: unknown) =>
+  ipcMain.handle(IpcChannels.modelCatalogComfyuiTemplateDetail, (_e, name: unknown, vendorKey: unknown) =>
     fetchComfyuiTemplateDetail(comfyBaseUrl(vendorKey), String(name || "")));
   // ws 进度桥（P 轨）：提交后 watch 登记 prompt_id→节点，进度/预览经 nomi:tasks:comfyui:progress 推回；
   // interrupt = 遮罩取消按钮（/interrupt + /queue delete 双发 best-effort）。
-  ipcMain.handle("nomi:tasks:comfyui:watch", (event, payload: unknown) =>
+  ipcMain.handle(IpcChannels.tasksComfyuiWatch, (event, payload: unknown) =>
     watchComfyuiTask((payload && typeof payload === "object" ? payload : {}) as Record<string, unknown>, event.sender.id));
-  ipcMain.handle("nomi:tasks:comfyui:unwatch", (_event, promptId: unknown) => unwatchComfyuiTask(promptId));
-  ipcMain.handle("nomi:tasks:comfyui:interrupt", (_event, promptId: unknown) => interruptComfyuiTask(promptId));
+  ipcMain.handle(IpcChannels.tasksComfyuiUnwatch, (_event, promptId: unknown) => unwatchComfyuiTask(promptId));
+  ipcMain.handle(IpcChannels.tasksComfyuiInterrupt, (_event, promptId: unknown) => interruptComfyuiTask(promptId));
 }

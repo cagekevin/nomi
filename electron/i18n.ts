@@ -1,4 +1,5 @@
 import { app, ipcMain } from "electron";
+import { IpcChannels } from "./shared/ipcChannels";
 
 export type DesktopLocale = "zh-CN" | "en";
 
@@ -85,8 +86,8 @@ export function desktopT(key: DesktopTranslationKey, values: Record<string, stri
 //  · set-locale：渲染层切语言 → 同步桌面侧（原生菜单/对话框文案）。
 //  · get-system-locale：首启无存储偏好时，渲染层同步探测 OS 语言（app.getLocale() 由 --lang/系统设定）。
 export function registerI18nIpc(): void {
-  ipcMain.on("nomi:i18n:set-locale", (_event, locale: unknown) => setDesktopLocale(locale));
-  ipcMain.on("nomi:i18n:get-system-locale", (event) => {
+  ipcMain.on(IpcChannels.i18nSetLocale, (_event, locale: unknown) => setDesktopLocale(locale));
+  ipcMain.on(IpcChannels.i18nGetSystemLocale, (event) => {
     try {
       event.returnValue = { ok: true, value: app.getLocale() };
     } catch (error) {

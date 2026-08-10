@@ -2,6 +2,7 @@ import { ipcMain, webContents as electronWebContents } from "electron";
 import type { WebContents } from "electron";
 import { beginTurnTrace, traceChatEvent, traceGateDenied, traceToolDecision } from "../events/agentChatTrace";
 import { desktopT } from "../i18n";
+import { EventChannels, IpcChannels } from "../shared/ipcChannels";
 
 // ---------------------------------------------------------------------------
 // Agent chat V2 — real streaming + tool-call confirmation
@@ -48,11 +49,11 @@ function sendChatV2Event(session: AgentChatV2Session, event: unknown): void {
   traceChatEvent(session.sessionId, event);
   const target: WebContents | undefined = electronWebContents.fromId(session.webContentsId) || undefined;
   if (!target || target.isDestroyed()) return;
-  target.send("nomi:agents:chatV2:event", { sessionId: session.sessionId, event });
+  target.send(EventChannels.agentsChatV2Event, { sessionId: session.sessionId, event });
 }
 
 export function registerAgentChatV2Ipc(): void {
-  ipcMain.handle("nomi:agents:chatV2:start", async (event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.agentsChatV2Start, async (event, payload: Record<string, unknown>) => {
     const sessionId = `chatV2-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const session: AgentChatV2Session = {
       sessionId,
@@ -119,7 +120,7 @@ export function registerAgentChatV2Ipc(): void {
     return { sessionId };
   });
 
-  ipcMain.handle("nomi:agents:chatV2:confirmTool", async (_event, payload: {
+  ipcMain.handle(IpcChannels.agentsChatV2ConfirmTool, async (_event, payload: {
     sessionId: string;
     toolCallId: string;
     // S6-0:ok 分支携 effectiveArgs/overridesDelta —— 进 proposal.approved 供对账,result.resolve 不取它。
@@ -157,7 +158,7 @@ export function registerAgentChatV2Ipc(): void {
     return { ok: true };
   });
 
-  ipcMain.handle("nomi:agents:chatV2:cancel", async (_event, payload: { sessionId: string }) => {
+  ipcMain.handle(IpcChannels.agentsChatV2Cancel, async (_event, payload: { sessionId: string }) => {
     const session = agentChatV2Sessions.get(payload.sessionId);
     if (!session) return { ok: false, error: "session not found" };
     // 真取消（abort 在途流 + 解开挂起确认并清超时定时器），与渲染层销毁共用同一出口。
@@ -167,21 +168,21 @@ export function registerAgentChatV2Ipc(): void {
 
   // "新对话" — wipe the shared conversation memory for a sessionKey so the next
   // turn starts fresh (no key = wipe all).
-  ipcMain.handle("nomi:agents:chatV2:clearSession", async (_event, payload: { sessionKey?: string }) => {
+  ipcMain.handle(IpcChannels.agentsChatV2ClearSession, async (_event, payload: { sessionKey?: string }) => {
     const { clearAgentChatV2History } = await loadAgentChatV2Module();
     clearAgentChatV2History(payload?.sessionKey);
     return { ok: true };
   });
 
   // S1b 诚实探针:UI 呈现的"AI 记得的范围"⊆ LLM 实际范围(总方案 §5 不变量)。
-  ipcMain.handle("nomi:agents:chatV2:sessionAlive", async (_event, payload: { sessionKey?: string }) => {
+  ipcMain.handle(IpcChannels.agentsChatV2SessionAlive, async (_event, payload: { sessionKey?: string }) => {
     const { hasAgentChatV2History } = await loadAgentChatV2Module();
     return { alive: hasAgentChatV2History(String(payload?.sessionKey || "")) };
   });
 
   // 会话历史:翻回旧对话时,从该线程气泡重建模型工作缓存,使模型「记起」这段、可无缝接着聊。
   ipcMain.handle(
-    "nomi:agents:chatV2:seedSession",
+    IpcChannels.agentsChatV2SeedSession,
     async (_event, payload: { sessionKey?: string; messages?: Array<{ role?: string; content?: string }> }) => {
       const { seedAgentChatV2History } = await loadAgentChatV2Module();
       seedAgentChatV2History(String(payload?.sessionKey || ""), Array.isArray(payload?.messages) ? payload.messages : []);

@@ -4,6 +4,7 @@ import { ipcMain, session } from "electron";
 import { normalizeProxyPrefs, readProxyPrefs, writeProxyPrefs, type ProxyPrefs } from "./proxySettings";
 import { probeOutbound, probeTargets } from "./proxyProbe";
 import { applySystemProxy, getProxyStatus } from "./systemProxy";
+import { IpcChannels } from "./shared/ipcChannels";
 
 /**
  * 启动时按已存偏好装一次代理。
@@ -18,16 +19,16 @@ export async function applyProxyAtBoot(): Promise<void> {
 export function registerProxyIpc(): void {
   // 必须传 readProxyPrefs()：getProxyStatus 不传参会退回「跟随系统」默认值，
   // 面板一打开就把用户存的档显示错（拆分模块时差点漏掉这个默认参数的陷阱）。
-  ipcMain.handle("nomi:proxy:get", async () => ({ ok: true, status: getProxyStatus(readProxyPrefs()) }));
+  ipcMain.handle(IpcChannels.proxyGet, async () => ({ ok: true, status: getProxyStatus(readProxyPrefs()) }));
 
-  ipcMain.handle("nomi:proxy:set", async (_event, payload: unknown) => {
+  ipcMain.handle(IpcChannels.proxySet, async (_event, payload: unknown) => {
     const prefs = writeProxyPrefs(normalizeProxyPrefs(payload));
     // 即时重装：热切换是这个设置成立的前提，否则用户改完还得重启（那这设置就废了一半）。
     await applySystemProxy(session.defaultSession, prefs as ProxyPrefs);
     return { ok: true, status: getProxyStatus(prefs) };
   });
 
-  ipcMain.handle("nomi:proxy:test", async () => {
+  ipcMain.handle(IpcChannels.proxyTest, async () => {
     const result = await probeOutbound(probeTargets());
     return { ok: true, result, status: getProxyStatus(readProxyPrefs()) };
   });

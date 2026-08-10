@@ -4,6 +4,7 @@ import { describeIllegalHeader, findIllegalHeader, findNonHeaderSafeChar, isJson
 import { guessModelKind } from "../../catalog/modelKindHeuristic";
 import { parseModelListResponse } from "./modelListResponse";
 import { normalizeProviderKind } from "../../catalog/catalogStore";
+import { IpcChannels } from "../../shared/ipcChannels";
 
 // ---------------------------------------------------------------------------
 // Onboarding — 中转拉取式接入 IPC（手填地址+key → 拉模型 → 按 id 分类 → 保存）。
@@ -141,7 +142,7 @@ export function registerOnboardingIpc(): void {
   // PRIMARY model-adding path — manual provider entry (BaseURL + key + models).
   // Deterministic openai-compatible text commit; reuses the single catalog write
   // path. No forced connectivity test (aligns with opencode; see test-connection).
-  ipcMain.handle("nomi:onboarding:manual-commit", async (_event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.onboardingManualCommit, async (_event, payload: Record<string, unknown>) => {
     try {
       // R1：走唯一 normalizeProviderKind（接受 openai-responses），不再 2 值 clamp。
       const providerKind = normalizeProviderKind(payload?.providerKind);
@@ -221,7 +222,7 @@ export function registerOnboardingIpc(): void {
 
   // 类型启发式（Issue #8）：从 /v1/models 拉到/手填的模型 id 没带类型，主进程按关键词猜
   // 图片/视频/文本（单一真相源 guessModelKind），返回给 UI 预填「类型」下拉，用户可改。
-  ipcMain.handle("nomi:onboarding:guess-kinds", async (_event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.onboardingGuessKinds, async (_event, payload: Record<string, unknown>) => {
     const ids = Array.isArray(payload?.ids) ? (payload.ids as unknown[]).map((x) => String(x || "")) : [];
     const kinds: Record<string, "text" | "image" | "video" | "audio"> = {};
     for (const id of ids) if (id) kinds[id] = guessModelKind(id);
@@ -233,7 +234,7 @@ export function registerOnboardingIpc(): void {
   // chat↔responses 共享 /v1 baseURL + bearer，只 path/body 不同，挨个发极小请求探测；
   // anthropic（host root + x-api-key）仅当 hostname 像 anthropic 或地址留空时纳入。
   // 专家在表单展开「接口协议」强制指定时，payload.providerKind 给定 → 只测那一个。
-  ipcMain.handle("nomi:onboarding:test-connection", async (_event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.onboardingTestConnection, async (_event, payload: Record<string, unknown>) => {
     const rawBaseUrl = String(payload?.baseUrl || "").trim().replace(/\/+$/, "");
     const apiKey = String(payload?.apiKey || "").trim();
     const modelId = String(payload?.modelId || "").trim();
@@ -313,7 +314,7 @@ export function registerOnboardingIpc(): void {
   // user picks from real model ids instead of guessing/typing. Relays are usually
   // OpenAI-compatible and expose this; when they don't, the UI falls back to manual
   // id entry (this just returns ok:false and nothing is blocked).
-  ipcMain.handle("nomi:onboarding:list-models", async (_event, payload: Record<string, unknown>) => {
+  ipcMain.handle(IpcChannels.onboardingListModels, async (_event, payload: Record<string, unknown>) => {
     // R1：唯一归一化器。openai-responses 与 openai-compatible 一样走 GET {baseUrl}/models。
     const providerKind = normalizeProviderKind(payload?.providerKind);
     const rawBaseUrl = String(payload?.baseUrl || "").trim().replace(/\/+$/, "");
