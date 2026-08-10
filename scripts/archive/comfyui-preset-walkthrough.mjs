@@ -1,0 +1,169 @@
+// R13 真机走查：ComfyUI 预置模板（WAN2.2）缺件闸。
+// 场景：① 点开模板 → 缺 6 个模型（红 chip + 逐文件 ✗/目录/复制/下载链，启用禁点）；
+//       ② mock 端「装好」全部文件 → 重新检测 → 全部就绪 chip + 启用可点；
+//       ③ 一键启用 → workflow 行出现在卡里（已启用 chip）。
+// 场景④：导入自定义图（含 checkpoint 参数）→ combo 真实选项烤进参数控件（读落库 catalog 实证 select+options）。
+// 用法：pnpm build && node scripts/comfyui-preset-walkthrough.mjs
+import { _electron as electron } from 'playwright'
+import { createRequire } from 'node:module'
+import http from 'node:http'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { mkdirSync, mkdtempSync, readFileSync } from 'node:fs'
+import os from 'node:os'
+
+const require = createRequire(import.meta.url)
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const outDir = path.join(repoRoot, '.comfyui-preset-walk')
+mkdirSync(outDir, { recursive: true })
+const settingsDir = mkdtempSync(path.join(os.tmpdir(), 'comfyui-preset-walk-'))
+const shot = async (win, name) => { await win.screenshot({ path: path.join(outDir, name) }); console.log('  📸 ' + name) }
+
+const WAN_FILES = [
+  'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors',
+  'wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors',
+  'wan2.2_i2v_lightx2v_4steps_lora_v1_high_noise.safetensors',
+  'wan2.2_i2v_lightx2v_4steps_lora_v1_low_noise.safetensors',
+  'umt5_xxl_fp8_e4m3fn_scaled.safetensors',
+  'wan_2.1_vae.safetensors',
+]
+let installed = false // false = 缺全部 wan 文件；true = 全装好（经 /__walk/enrich 翻转）
+const objectInfo = () => {
+  const files = installed ? WAN_FILES : ['placeholder.safetensors']
+  const enums = (key) => ({ input: { required: { [key]: [files] } } })
+  return {
+    LoadImage: { input: { required: {} } },
+    CLIPTextEncode: { input: { required: {} } },
+    ModelSamplingSD3: { input: { required: {} } },
+    WanImageToVideo: { input: { required: {} } },
+    VAEDecode: { input: { required: {} } },
+    CreateVideo: { input: { required: {} } },
+    SaveVideo: { input: { required: {} } },
+    SaveImage: { input: { required: {} } },
+    EmptyLatentImage: { input: { required: {} } },
+    KSampler: { input: { required: { sampler_name: [['euler', 'ddim']], scheduler: [['simple', 'normal']] } } },
+    KSamplerAdvanced: { input: { required: { sampler_name: [['euler']], scheduler: [['simple']], add_noise: [['enable', 'disable']], return_with_leftover_noise: [['enable', 'disable']] } } },
+    CLIPLoader: enums('clip_name'),
+    VAELoader: enums('vae_name'),
+    UNETLoader: enums('unet_name'),
+    LoraLoaderModelOnly: enums('lora_name'),
+    CheckpointLoaderSimple: enums('ckpt_name'),
+  }
+}
+
+// 场景④用：含 checkpoint 的 SD 图（节点 1 = CheckpointLoaderSimple，其 ckpt_name 是首个可绑 widget →「添加参数」自动选中）。
+const COMBO_GRAPH = JSON.stringify({
+  1: { class_type: 'CheckpointLoaderSimple', inputs: { ckpt_name: 'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors' } },
+  3: { class_type: 'KSampler', inputs: { seed: 42, steps: 20, cfg: 7, sampler_name: 'euler', scheduler: 'simple', denoise: 1, model: ['1', 0], positive: ['6', 0], negative: ['7', 0], latent_image: ['5', 0] } },
+  5: { class_type: 'EmptyLatentImage', inputs: { width: 512, height: 512, batch_size: 1 } },
+  6: { class_type: 'CLIPTextEncode', inputs: { text: 'a cat', clip: ['1', 1] } },
+  7: { class_type: 'CLIPTextEncode', inputs: { text: '', clip: ['1', 1] } },
+  8: { class_type: 'VAEDecode', inputs: { samples: ['3', 0], vae: ['1', 2] } },
+  9: { class_type: 'SaveImage', inputs: { filename_prefix: 'combo', images: ['8', 0] } },
+})
+
+const mock = http.createServer((req, res) => {
+  const url = req.url || ''
+  if (url.startsWith('/system_stats')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify({ system: { python_version: '3.11.9', comfyui_version: '0.3.30' }, devices: [{ name: 'cuda:0', vram_total: 1 }] }))
+    return
+  }
+  if (url.startsWith('/__walk/enrich')) { installed = true; res.writeHead(200); res.end('ok'); return }
+  if (url.startsWith('/object_info')) {
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(objectInfo()))
+    return
+  }
+  res.writeHead(404); res.end()
+})
+await new Promise((r) => mock.listen(8188, '127.0.0.1', r))
+
+const app = await electron.launch({
+  executablePath: require('electron'),
+  args: ['.'],
+  cwd: repoRoot,
+  env: {
+    ...process.env,
+    NOMI_E2E: '1',
+    NOMI_E2E_ALLOW_MULTI_INSTANCE: '1',
+    NOMI_RENDERER_URL: 'file://' + path.join(repoRoot, 'dist', 'index.html'),
+    NOMI_SETTINGS_DIR: settingsDir,
+    NOMI_PROJECTS_DIR: mkdtempSync(path.join(os.tmpdir(), 'comfyui-preset-proj-')),
+  },
+})
+const errors = []
+try {
+  const win = await app.firstWindow()
+  const bw = await app.browserWindow(win)
+  await bw.evaluate((w) => w.setBounds({ x: 0, y: 0, width: 1440, height: 1000 })).catch(() => {})
+  win.on('pageerror', (e) => errors.push(String(e)))
+  win.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()) })
+  await win.waitForLoadState('domcontentloaded')
+  await win.waitForTimeout(1800)
+
+  await win.getByRole('button', { name: '接入模型', exact: false }).first().click()
+  await win.waitForTimeout(1000)
+  await win.getByText('有本地 ComfyUI', { exact: false }).first().click()
+  await win.waitForTimeout(500)
+  await win.getByText('ComfyUI · 本地', { exact: false }).first().click()
+  await win.waitForTimeout(400)
+  await win.getByRole('button', { name: '启用 ComfyUI', exact: false }).first().click()
+  await win.waitForTimeout(2200)
+  await win.getByText('ComfyUI · 本地', { exact: false }).first().click()
+  await win.waitForTimeout(600)
+
+  // ── ① 缺件态 ──
+  await win.getByText('WAN2.2 图生视频 · 14B', { exact: false }).first().click()
+  await win.waitForTimeout(1500) // 等 reconcile
+  await win.getByText('缺', { exact: false }).first().scrollIntoViewIfNeeded()
+  await shot(win, '01-preset-missing-6.png') // 验：红 chip「缺 6 项」+ 逐文件 ✗ + 目录 + 复制/下载钮 + 启用禁点
+
+  // ── ② mock 装好 → 重新检测 ──
+  await fetch('http://127.0.0.1:8188/__walk/enrich')
+  await win.getByRole('button', { name: '重新检测', exact: true }).first().click()
+  await win.waitForTimeout(1500)
+  await shot(win, '02-preset-all-ready.png') // 验：绿 chip「全部就绪」+ 逐文件 ✓ + 启用可点
+
+  // ── ③ 一键启用 ──
+  await win.getByRole('button', { name: '一键启用模板', exact: true }).click()
+  await win.waitForTimeout(1500)
+  await win.getByText('WAN2.2 图生视频 · 14B', { exact: false }).first().scrollIntoViewIfNeeded()
+  await shot(win, '03-preset-enabled-row.png') // 验：workflow 行出现（视频类型）+ 模板行 chip 变「已启用」
+
+  // ── ④ 导入含 checkpoint 的自定义图 → combo 真实选项烤进参数控件 ──
+  await win.waitForTimeout(3500) // 等启用 toast 消退，别抢 getByText
+  await win.getByRole('button', { name: '导入自定义工作流', exact: false }).first().click()
+  await win.waitForTimeout(400)
+  await win.getByRole('textbox', { name: 'workflow_api.json 粘贴框' }).fill(COMBO_GRAPH)
+  await win.getByRole('button', { name: '分析工作流', exact: true }).click()
+  await win.waitForTimeout(1500) // 等 reconcile 带回 enumOptions
+  await win.getByRole('button', { name: '添加参数', exact: true }).click() // 自动选中首个候选 = #1 ckpt_name
+  await win.waitForTimeout(400)
+  await win.getByText('生成时可调参数', { exact: true }).scrollIntoViewIfNeeded()
+  await shot(win, '04-combo-param-row.png') // 验：参数行绑到 #1 CheckpointLoaderSimple.ckpt_name
+  await win.getByPlaceholder('给它起个名', { exact: false }).fill('Combo 下拉走查')
+  await win.getByRole('button', { name: '导入', exact: true }).click()
+  await win.waitForTimeout(1500)
+  // 落库实证：meta.parameters[0] 必须是 select + 本机全部 6 个文件选项（画布下拉即读此声明）。
+  const catalogJson = JSON.parse(readFileSync(path.join(settingsDir, 'model-catalog.json'), 'utf8'))
+  const comboModel = (catalogJson.models || []).find((m) => m.labelZh === 'Combo 下拉走查')
+  const allParams = comboModel?.meta?.parameters || []
+  // 建议数值参数(seed/steps/…)在前；「添加参数」加的 ckpt 是唯一命中 combo 的 → 应被烤成 select。
+  const comboParam = allParams.find((p) => p.type === 'select')
+  const comboOk = Boolean(comboParam) && Array.isArray(comboParam.options) && comboParam.options.length >= 6
+    && comboParam.options.includes('wan_2.1_vae.safetensors')
+    && comboParam.default === 'wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors'
+  console.log('  combo 烤入 select: ' + (comboOk ? `✓ ${comboParam.key} options=${comboParam.options.length}` : '✗ ' + JSON.stringify(allParams)))
+  if (!comboOk) throw new Error('combo 参数没有烤成 select')
+  await shot(win, '05-combo-imported.png')
+
+  console.log(errors.length ? ('  ⚠️ console/page errors:\n' + errors.slice(0, 8).join('\n')) : '  ✅ 无 console/page error')
+} catch (e) {
+  console.error('  ❌ 走查失败：', e)
+  try { const w = await app.firstWindow(); await shot(w, 'ERROR.png') } catch { /* noop */ }
+  process.exitCode = 1
+} finally {
+  await app.close()
+  mock.close()
+}

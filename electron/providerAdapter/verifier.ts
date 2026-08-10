@@ -1,0 +1,226 @@
+import crypto from "node:crypto";
+import { hardenedFetch, type HardenedFetchOptions } from "../hardenedFetch";
+import type { LocalAssetReader } from "../catalog/assetLocalization";
+import type { Mapping, Model, Vendor } from "../catalog/types";
+import { streamTextTask } from "../ai/streamTextTask";
+import {
+  buildProfileTaskResult,
+  executeProfileOperation,
+  type TaskRequest,
+  type TaskResult,
+} from "../runtime";
+import type { AdapterModeDraft } from "./types";
+import { redactAdapterSecrets } from "./redaction";
+
+const REFERENCE_URL = "nomi-local://adapter-test/reference.png";
+const REFERENCE_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR42mP8z8AARAwMjDAGDAAANgQCAf6mRpsAAAAASUVORK5CYII=",
+  "base64",
+);
+
+export type AdapterVerificationResult =
+  | { ok: true; taskKind: AdapterModeDraft["taskKind"]; requestSummary?: unknown }
+  | {
+      ok: false;
+      taskKind: AdapterModeDraft["taskKind"];
+      stage: "localize_reference" | "create" | "poll" | "verify_asset";
+      error: string;
+      requestSummary?: unknown;
+    };
+
+type ExecuteInput = Parameters<typeof executeProfileOperation>[0];
+type NormalizeInput = Parameters<typeof buildProfileTaskResult>[0];
+
+export type AdapterVerifierDependencies = {
+  execute?: (input: ExecuteInput) => Promise<{ response: unknown; request: unknown }>;
+  normalize?: (input: NormalizeInput) => Promise<{ result: TaskResult; providerMeta: Record<string, unknown> }>;
+  fetchAsset?: (
+    url: string,
+    options: HardenedFetchOptions,
+  ) => Promise<{ contentType: string; bytes: Buffer }>;
+  sleep?: (ms: number) => Promise<void>;
+  maxPolls?: number;
+  pollIntervalMs?: number;
+  verifyText?: (input: {
+    vendor: Vendor;
+    model: Model;
+    apiKey: string;
+    prompt: string;
+    imageUrl?: string;
+  }) => Promise<{ text: string }>;
+};
+
+const defaultReadFixture: LocalAssetReader = (url) =>
+  url === REFERENCE_URL
+    ? { bytes: REFERENCE_PNG, contentType: "image/png", fileName: "adapter-reference.png" }
+    : null;
+
+function errorMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  return redactAdapterSecrets(raw);
+}
+
+function mappingFor(vendor: Vendor, model: Model, mode: AdapterModeDraft): Mapping {
+  const now = new Date().toISOString();
+  return {
+    id: `candidate-${crypto.randomUUID()}`,
+    vendorKey: vendor.key,
+    modelKey: model.modelKey,
+    taskKind: mode.taskKind,
+    name: `${model.modelKey}/${mode.taskKind} candidate`,
+    enabled: false,
+    create: mode.create,
+    ...(mode.query ? { query: mode.query } : {}),
+    ...(mode.statusMapping ? { statusMapping: mode.statusMapping } : {}),
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+function verificationRequest(model: Model, mode: AdapterModeDraft): TaskRequest {
+  const extras: Record<string, unknown> = { modelKey: model.modelKey, ...(mode.testParams || {}) };
+  if (mode.referenceParam) {
+    extras[mode.referenceParam] = mode.referenceShape === "array" ? [REFERENCE_URL] : REFERENCE_URL;
+    // The production request normalizer recognizes this canonical collection even when a wire-specific alias is also used.
+    if (!("referenceImages" in extras)) extras.referenceImages = [REFERENCE_URL];
+  }
+  return {
+    kind: mode.taskKind,
+    prompt:
+      mode.taskKind === "image_edit" || mode.taskKind.startsWith("image_to_")
+        ? "Preserve the blue reference square and make one minimal variation."
+        : "Nomi adapter verification. Return one minimal result.",
+    extras,
+  };
+}
+
+function allowedContentTypes(kind: Model["kind"]): string[] {
+  if (kind === "video") return ["video/"];
+  if (kind === "audio") return ["audio/"];
+  if (kind === "model3d") return ["model/", "application/octet-stream", "application/gltf", "application/json"];
+  return ["image/"];
+}
+
+function dataUrlMatches(url: string, kind: Model["kind"]): boolean {
+  const prefix = kind === "video" ? "data:video/" : kind === "audio" ? "data:audio/" : kind === "model3d" ? "data:model/" : "data:image/";
+  return url.toLowerCase().startsWith(prefix);
+}
+
+export async function verifyAdapterMode(
+  input: { vendor: Vendor; model: Model; apiKey: string; mode: AdapterModeDraft },
+  dependencies: AdapterVerifierDependencies = {},
+): Promise<AdapterVerificationResult> {
+  const execute = dependencies.execute || executeProfileOperation;
+  const normalize = dependencies.normalize || buildProfileTaskResult;
+  const fetchAsset = dependencies.fetchAsset || hardenedFetch;
+  const sleep = dependencies.sleep || ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const verifyText = dependencies.verifyText || (async (textInput) => streamTextTask(
+    {
+      ...textInput,
+      temperature: 0,
+      maxTokens: 24,
+    },
+    { abortSignal: AbortSignal.timeout(45_000) },
+  ));
+  const mapping = mappingFor(input.vendor, input.model, input.mode);
+  const request = verificationRequest(input.model, input.mode);
+  let stage: "localize_reference" | "create" | "poll" | "verify_asset" = input.mode.referenceParam
+    ? "localize_reference"
+    : "create";
+  let requestSummary: unknown;
+
+  try {
+    if (input.model.kind === "text") {
+      stage = "create";
+      const prompt = "Nomi adapter verification. Reply with the single word ready.";
+      const textResult = await verifyText({
+        vendor: input.vendor,
+        model: input.model,
+        apiKey: input.apiKey,
+        prompt,
+        ...(input.mode.taskKind === "image_to_prompt"
+          ? { imageUrl: `data:image/png;base64,${REFERENCE_PNG.toString("base64")}` }
+          : {}),
+      });
+      requestSummary = {
+        productionPath: "streamTextTask",
+        modelKey: input.model.modelKey,
+        taskKind: input.mode.taskKind,
+      };
+      if (!textResult.text.trim()) throw new Error("Text verification returned no readable text");
+      return { ok: true, taskKind: input.mode.taskKind, requestSummary };
+    }
+
+    let executed = await execute({
+      vendor: input.vendor,
+      model: input.model,
+      apiKey: input.apiKey,
+      request,
+      operation: input.mode.create,
+      localAssetReader: defaultReadFixture,
+    });
+    requestSummary = executed.request;
+    stage = "create";
+
+    let normalized = await normalize({
+      response: executed.response,
+      mapping,
+      operation: input.mode.create,
+      request,
+      taskIdFallback: `adapter-${crypto.randomUUID()}`,
+      wantedKind: input.model.kind,
+      vendor: input.vendor,
+      model: input.model,
+    });
+
+    if (normalized.result.status === "failed") throw new Error(normalized.result.error || "Provider returned a failed task");
+    if (normalized.result.status !== "succeeded") {
+      if (!input.mode.query) throw new Error("Provider returned a pending task but the adapter has no query operation");
+      stage = "poll";
+      const maxPolls = dependencies.maxPolls ?? 40;
+      for (let attempt = 0; attempt < maxPolls && normalized.result.status !== "succeeded"; attempt += 1) {
+        if (attempt > 0) await sleep(dependencies.pollIntervalMs ?? 3_000);
+        executed = await execute({
+          vendor: input.vendor,
+          model: input.model,
+          apiKey: input.apiKey,
+          request,
+          operation: input.mode.query,
+          providerMeta: normalized.providerMeta,
+          localAssetReader: defaultReadFixture,
+        });
+        requestSummary = executed.request;
+        normalized = await normalize({
+          response: executed.response,
+          mapping,
+          operation: input.mode.query,
+          request,
+          taskIdFallback: normalized.result.id,
+          wantedKind: input.model.kind,
+          vendor: input.vendor,
+          model: input.model,
+        });
+        if (normalized.result.status === "failed") throw new Error(normalized.result.error || "Provider returned a failed task");
+      }
+      if (normalized.result.status !== "succeeded") throw new Error("Provider verification timed out while polling");
+    }
+
+    stage = "verify_asset";
+    const asset = normalized.result.assets[0];
+    if (!asset?.url) throw new Error("Successful task returned no media asset URL");
+    if (asset.url.startsWith("data:")) {
+      if (!dataUrlMatches(asset.url, input.model.kind)) throw new Error("Returned data URL has the wrong media type");
+    } else {
+      await fetchAsset(asset.url, {
+        timeoutMs: 20_000,
+        maxBytes: input.model.kind === "video" ? 25 * 1024 * 1024 : 12 * 1024 * 1024,
+        allowContentTypes: allowedContentTypes(input.model.kind),
+      });
+    }
+    return { ok: true, taskKind: input.mode.taskKind, requestSummary };
+  } catch (error) {
+    const message = errorMessage(error);
+    if (stage === "localize_reference" && !/素材|asset|upload|local|上传/i.test(message)) stage = "create";
+    return { ok: false, taskKind: input.mode.taskKind, stage, error: message, requestSummary };
+  }
+}
