@@ -28,13 +28,19 @@
 
 ## 二、方案
 
-### 改造 A：IPC channel 常量化 + 类型化桥（最安全、收益最直观）
+### 改造 A：IPC channel 常量化 + 类型化桥（最安全、收益最直观）—— ✅ 已完成 2026-08-10
 1. 新建 `electron/shared/ipcChannels.ts`：导出所有 channel 名常量 + 配套 payload/return 类型（按域分组：`projects`、`assets`、`production-runs`、`model-catalog`…）。
 2. `main.ts` 注册处全部改用常量（`registerSyncIpc(IPC.projects.read, …)`）。
 3. `preload.ts` 暴露处全部改用同一常量。
-4. `src/desktop/*BridgeTypes.ts` 调用处改用同一常量（消除裸字符串根源）。
+4. `src/desktop/*BridgeTypes.ts` 调用处改用同一常量（消除裸字符串根源）。**实测：bridge 层是纯类型（不含 channel 字符串），channel 字符串只在 preload 实现层，故此项为空操作，已在 preload 内收口。**
 5. 前端 React 调用经 bridge 封装，间接受益（桥内已常量）。
 - **验收**：加一个 channel，编译器在所有引用点报错未适配；grep 全仓 `"nomi:` 裸字符串仅剩常量定义处。
+
+**A 完成记录（2026-08-10，分支 `refactor/decouple-ipc-runtime`）**：
+- commit `af3c2eb`：建 `ipcChannels.ts`（`IpcChannels` 请求类 + `EventChannels` 单向推送类）+ main.ts（63 处）+ preload.ts（160 处）+ assetsIpc 样例。
+- commit `e33beb1`：收剩余 26 个子模块 IPC 文件（comfyuiIpc/customCallIpc/exportJobIpc/productionRunIpc/onboardingIpc/agentChatV2Ipc/textStreamIpc/memoryIpc/eventsIpc/conversationsIpc/promptLibraryIpc/providerAdapter/settings×2/screenshot×2/proxy/notification/reviewTrace/assetEvents/i18n/windowCloseConfirmation/workspaceFileDelete/autoUpdater/productionRunDesktopLifecycle/comfyuiProgressSocket）。
+- 验证：electron tsc 全绿；4085 测试全通过（含各断言 channel 名的 `*.test.ts`）；脚本逐项校验「旧裸字符串值 == 新常量值」PASS（运行时零行为变化）；`grep "nomi:` 在 `electron/` 下仅剩 `ipcChannels.ts` + 测试断言。
+- 关键设计：事件类单向推送（`webContents.send`→`ipcRenderer.on`）统一走 `EventChannels`，请求类（handle/invoke/sendSync）统一走 `IpcChannels`；`comfyuiProgressSocket.ts` 保留 `COMFYUI_PROGRESS_CHANNEL` 导出但值改为常量引用（不破坏潜在外部 import）。
 
 ### 改造 B：拆 runtime.ts 百货层，理顺依赖方向
 1. 识别 `runtime.ts` re-export 的 20+ 符号，按其真实归属域归类（tasks、assets、export、catalog、agentChat）。
@@ -53,6 +59,7 @@
 
 ## 四、执行顺序与回滚
 - 顺序：**先 A 后 B**（A 完全独立且安全；B 改动面广但纯机械替换，可分批按域提交）。
+- **A 已完成**（见上，两笔 commit）。**B 尚未开始**。
 - 分批：B 按域分批（tasks → catalog → providerAdapter → capabilityCore），每批过五门（lint:ci / typecheck / test）再下一批。
 - 回滚：每批独立 commit，任一批五门不过即 revert 该批，不影响已完成的批。
 
@@ -63,6 +70,8 @@
 - `pnpm run build`（electron tsc）
 - `pnpm run check:tokens` / `check:i18n` / `check:filesize`（门岗不破）
 - 人工：grep 确认裸 `"nomi:` 字符串仅存于 `ipcChannels.ts`；`import … from "../runtime"` 无业务符号。
+
+**A 阶段验收状态**：typecheck ✅ / test（4085）✅ / build（electron tsc）✅ / grep `"nomi:` 仅存于 `ipcChannels.ts`+测试断言 ✅。B 阶段待执行（B 的核心验证是 typecheck + 「runtime 无业务符号」grep）。
 
 ## 六、预期收益
 - **改一处动多处**痛点消除：A 让 channel 改名编译器全链报错；B 让 `TaskResult` 类改动收敛到单一归属域。

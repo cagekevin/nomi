@@ -103,6 +103,7 @@
 | [2026-06-03-styles-css-teardown.md](2026-06-03-styles-css-teardown.md) | styles.css 拆除（死 CSS 清理） | 🚧 |
 | [2026-06-06-main-process-proxy.md](2026-06-06-main-process-proxy.md) | 主进程 fetch 走代理（Phase 1 自动探测） | ✅ |
 | [2026-06-08-巨壳拆分-B-Scene3D-A-NodeParameterControls.md](2026-06-08-巨壳拆分-B-Scene3D-A-NodeParameterControls.md) | 巨壳拆分：Scene3DFullscreen → NodeParameterControls | 🚧 |
+| [2026-08-10-decouple-ipc-runtime.md](2026-08-10-decouple-ipc-runtime.md) | **解耦 IPC 字符串 + runtime 百货层**：A(IPC 常量化 `ipcChannels.ts`，全仓收敛)✅ / B(runtime 拆百货层)待实施 | 🚧 |
 | [2026-06-08-巨壳拆分-任务派发.md](2026-06-08-巨壳拆分-任务派发.md) | 巨壳拆分多窗口任务派发 | 📎 |
 | [nomi-select-unify.md](nomi-select-unify.md) | 统一选择面板 NomiSelect 通用组件 | 🚧 |
 
