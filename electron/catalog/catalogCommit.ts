@@ -6,7 +6,7 @@ import { nativeWireProfileForArchetype, type NativeWireProfile } from "./nativeW
 import { guessModelKind } from "./modelKindHeuristic";
 import { hardenedFetchText } from "../hardenedFetch";
 import type { AiSdkProviderKind, BillingModelKind, HttpOperation, Model, ProfileKind, Vendor } from "./types";
-import type { TaskRequest } from "../runtime";
+import type { TaskRequest } from "../tasks/taskTypes";
 import {
   mutateCatalog,
   normalizeProviderKind,

@@ -118,51 +118,10 @@ export type {
   RunAgentChatV2Payload,
 } from "./ai/agentChatV2";
 
-export type TaskRequest = {
-  kind: ProfileKind;
-  prompt: string;
-  negativePrompt?: string;
-  seed?: number;
-  width?: number;
-  height?: number;
-  steps?: number;
-  cfgScale?: number;
-  extras?: Record<string, unknown>;
-};
-
-export type TaskResult = {
-  id: string;
-  kind: ProfileKind;
-  status: "queued" | "running" | "succeeded" | "failed";
-  assets: Array<{
-    type: "image" | "video" | "audio" | "model3d";
-    url: string;
-    thumbnailUrl?: string | null;
-    assetId?: string | null;
-    assetRefId?: string | null;
-    assetName?: string | null;
-    /** 原始 CDN URL（https://...）。供后续生成直接用，无需上传。可能过期，过期后退回本地字节。 */
-    providerUrl?: string | null;
-    durationSeconds?: number;
-  }>;
-  raw: unknown;
-  /** failed 时的上游真实原因（tasks/responseParsing.taskFailureMessageFromResponse 取；渲染层只读这一处）。 */
-  error?: string;
-  /**
-   * E11: Complete provenance for reproducibility. Populated on successful
-   * generation. Renderer copies this into GenerationNodeResult.provenance.
-   */
-  provenance?: {
-    provider?: string;
-    modelKey?: string;
-    prompt?: string;
-    negativePrompt?: string;
-    seed?: number;
-    params?: Record<string, unknown>;
-    vendorRequestId?: string;
-    timestamp: number;
-  };
-};
+// 任务执行共享类型已抽到 ./tasks/taskTypes（改造 B：catalog 域不再反向依赖 runtime 类型）。
+// 此处仍 re-export 保住 main.ts/测试 从 "./runtime" 的既有 import 面（types only，零运行时）。
+import type { CachedTask, TaskRequest, TaskResult } from "./tasks/taskTypes";
+export type { TaskRequest, TaskResult, CachedTask } from "./tasks/taskTypes";
 
 // TTL(1h) + LRU(200) 上限，防异步任务条目无界驻留（P0-7）。不再缓存明文 apiKey。
 export const taskCache = new TtlLruCache<CachedTask>({ maxEntries: 200, ttlMs: 60 * 60 * 1000 });
@@ -172,20 +131,6 @@ export function admitTask(id: string, entry: CachedTask): void {
   taskCache.set(id, entry);
   markTaskAdmitted(id);
 }
-
-export type CachedTask = {
-  vendor: string;
-  request: TaskRequest;
-  raw: unknown;
-  mapping?: Mapping | null;
-  model?: Model;
-  providerMeta?: JsonRecord;
-  projectId?: string;
-  nodeId?: string;
-  wantedKind?: BillingModelKind;
-  /** S8 指纹:异步任务终态成功时写回指纹缓存用。 */
-  fingerprint?: string;
-};
 
 // 可执行模型解析下沉到 catalog/executableModel（R12 净减）；re-export 保住 textTaskRunner/taskResultQuery 既有 import 面。
 export { findExecutableModel, findExecutableModelForTask } from "./catalog/executableModel";

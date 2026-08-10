@@ -16,7 +16,7 @@ import { CustomCallScriptError, runCustomCallScript } from "./customCallRunner";
 import { readCatalog } from "./catalogStore";
 import { trim } from "../jsonUtils";
 import type { BillingModelKind, Model, Vendor } from "./types";
-import type { TaskRequest, TaskResult } from "../runtime";
+import type { TaskRequest, TaskResult } from "../tasks/taskTypes";
 
 export type CustomCallDispatchInput = {
   vendor: Vendor;

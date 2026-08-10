@@ -6,7 +6,7 @@ import { extractVendorExtraHeaders } from "./catalogStore";
 import { taskTemplateParams } from "./taskParams";
 import { applyParamMap, type ParamMap } from "./paramTranslate";
 import type { HttpOperation, Model, Vendor } from "./types";
-import type { TaskRequest } from "../runtime";
+import type { TaskRequest } from "../tasks/taskTypes";
 
 /** 共享 requestPipeline context 构造。铁律翻译层：渲染 body 前按 codec 的 paramMap 把档案中性参数译成该站 wire 字段。 */
 export function templateContext(

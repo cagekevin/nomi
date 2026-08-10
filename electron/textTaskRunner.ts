@@ -8,7 +8,8 @@ import crypto from "node:crypto";
 import { streamTextTask } from "./ai/streamTextTask";
 import { firstReferenceImage } from "./catalog/taskParams";
 import { firstString, trim } from "./jsonUtils";
-import { billingKindForTaskKind, findExecutableModelForTask, type TaskRequest, type TaskResult } from "./runtime";
+import { billingKindForTaskKind, findExecutableModelForTask } from "./runtime";
+import type { TaskRequest, TaskResult } from "./tasks/taskTypes";
 import type { Model, Vendor } from "./catalog/types";
 
 // 文本任务的执行收口（单一真相）：runTask（收集最终）与 runTextTaskStream（逐字流式）

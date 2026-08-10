@@ -7,7 +7,7 @@ import { renderTemplateValue } from "../ai/requestPipeline";
 import { readNomiLocalAsset } from "../assets/localAssetFile";
 import { templateContext, buildProfileHttpRequest } from "./profileHttpRequest";
 import type { HttpOperation, Model, Vendor } from "./types";
-import type { TaskRequest } from "../runtime";
+import type { TaskRequest } from "../tasks/taskTypes";
 
 type MultipartSpec = NonNullable<HttpOperation["multipart"]>;
 

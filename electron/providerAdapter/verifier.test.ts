@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Mapping, Model, Vendor } from "../catalog/types";
-import type { TaskRequest, TaskResult } from "../runtime";
+import type { TaskRequest, TaskResult } from "../tasks/taskTypes";
 import type { AdapterModeDraft } from "./types";
 import { verifyAdapterMode, type AdapterVerifierDependencies } from "./verifier";
 
