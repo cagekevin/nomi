@@ -24,9 +24,6 @@ vi.mock("electron", () => ({
     },
     getAppPath: () => process.cwd(),
   },
-  // eventBus.publishBroadcast 动态 import("electron").then(({ BrowserWindow }) => ...)
-  // 拿 getAllWindows 广播；mock 缺它会解构出 undefined → 异步 unhandled rejection 污染测试。
-  BrowserWindow: { getAllWindows: () => [] },
 }));
 
 function makeTempDir(name: string): string {
