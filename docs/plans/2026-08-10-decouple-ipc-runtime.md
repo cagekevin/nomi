@@ -42,12 +42,22 @@
 - 验证：electron tsc 全绿；4085 测试全通过（含各断言 channel 名的 `*.test.ts`）；脚本逐项校验「旧裸字符串值 == 新常量值」PASS（运行时零行为变化）；`grep "nomi:` 在 `electron/` 下仅剩 `ipcChannels.ts` + 测试断言。
 - 关键设计：事件类单向推送（`webContents.send`→`ipcRenderer.on`）统一走 `EventChannels`，请求类（handle/invoke/sendSync）统一走 `IpcChannels`；`comfyuiProgressSocket.ts` 保留 `COMFYUI_PROGRESS_CHANNEL` 导出但值改为常量引用（不破坏潜在外部 import）。
 
-### 改造 B：拆 runtime.ts 百货层，理顺依赖方向
-1. 识别 `runtime.ts` re-export 的 20+ 符号，按其真实归属域归类（tasks、assets、export、catalog、agentChat）。
-2. 将消费方 `import … from "../runtime"` 改为直接 `import … from "<真实归属模块>"`（如 `TaskRequest` 落到 `tasks/types.ts` 或 `providerAdapter/types.ts`）。
-3. `catalog/*` 的 6 个反向依赖改为指向 catalog 自身或显式 types 模块，断开 catalog→runtime。
-4. `runtime.ts` 仅保留运行时上下文（runtime context），不再做符号百货；最后删除 re-export 行。
-- **验收**：`import … from "../runtime"` 仅剩 runtime 自身上下文，无业务符号；catalog 域不 import runtime。
+### 改造 B：拆 runtime.ts 百货层，理顺依赖方向 —— ✅ 核心根因已完成（barrel 保留）
+1. 识别 `runtime.ts` re-export 的 20+ 符号，按其真实归属域归类（tasks、assets、export、catalog、agentChat）。✅
+2. 将消费方 `import … from "../runtime"` 改为直接 `import … from "<真实归属模块>"`（如 `TaskRequest` 落到 `tasks/types.ts` 或 `providerAdapter/types.ts`）。✅（类型归位）
+3. `catalog/*` 的 6 个反向依赖改为指向 catalog 自身或显式 types 模块，断开 catalog→runtime。✅
+4. `runtime.ts` 仅保留运行时上下文（runtime context），不再做符号百货；最后删除 re-export 行。⏸ **保留 barrel**（见下决策）
+- **验收**：`import … from "../runtime"` 仅剩 runtime 自身上下文，无业务符号；catalog 域不 import runtime。⏸ 部分达成（见下）
+
+**B 完成记录（2026-08-10，分支 `refactor/decouple-ipc-runtime`）**：
+- commit `b0d1395`：把 `TaskRequest`/`TaskResult`/`CachedTask` 抽到 `electron/tasks/taskTypes.ts`，runtime import+re-export（types only），catalog 5 文件（profileHttpRequest/multipartOperation/customCallDispatch/catalogCommit）+ providerAdapter/verifier.test 改为直接 import `../tasks/taskTypes`；textTaskRunner/audioTaskRunner 拆分。
+- commit `d5dbb5e`：catalogCommit 的 `testModelCatalogMapping` 把能静态解的函数（billingKindForTaskKind→./types、findExecutableModelForTask→./executableModel、buildProfileHttpRequest→./profileHttpRequest）改为 catalog 内部静态 import，动态 import 只保留 buildProfileTaskResult/executeProfileOperation（runtime 任务中枢核心执行函数）。
+
+**方案 B 决策（2026-08-10 用户拍板）**：
+- **保留 runtime.ts 作为公共 API 汇聚层（barrel）**，不拆散 31 个 re-export。理由：runtime 是任务执行中枢 + main.ts/测试的单一公共 API 入口（注释明确「re-export 保持 import 面不变」），完整拆散会让 36 个消费方（含 main.ts、20+ 测试）import 面碎片化、改动面巨大、收益边际。
+- plan 真正点名的病——**catalog 域反向依赖 runtime 类型（依赖方向混乱）——已根因解决**：catalog 不再 `import type { TaskRequest } from "../runtime"`，类型归位到 tasks/taskTypes。
+- 剩余 catalog→runtime 值依赖仅 `buildProfileTaskResult`/`executeProfileOperation`（runtime 任务中枢的核心执行函数，catalog 测 mapping 用中枢是合理依赖，非「依赖方向混乱」）。
+- 验证：electron tsc 全绿；4085 测试全通过。
 
 ---
 
@@ -59,8 +69,7 @@
 
 ## 四、执行顺序与回滚
 - 顺序：**先 A 后 B**（A 完全独立且安全；B 改动面广但纯机械替换，可分批按域提交）。
-- **A 已完成**（见上，两笔 commit）。**B 尚未开始**。
-- 分批：B 按域分批（tasks → catalog → providerAdapter → capabilityCore），每批过五门（lint:ci / typecheck / test）再下一批。
+- **A 已完成**（两笔 commit）。**B 核心根因已完成**（两笔 commit，方案 B：barrel 保留，见改造 B 记录）。
 - 回滚：每批独立 commit，任一批五门不过即 revert 该批，不影响已完成的批。
 
 ## 五、验收门（R11 五门全过）
@@ -71,7 +80,9 @@
 - `pnpm run check:tokens` / `check:i18n` / `check:filesize`（门岗不破）
 - 人工：grep 确认裸 `"nomi:` 字符串仅存于 `ipcChannels.ts`；`import … from "../runtime"` 无业务符号。
 
-**A 阶段验收状态**：typecheck ✅ / test（4085）✅ / build（electron tsc）✅ / grep `"nomi:` 仅存于 `ipcChannels.ts`+测试断言 ✅。B 阶段待执行（B 的核心验证是 typecheck + 「runtime 无业务符号」grep）。
+**A 阶段验收状态**：typecheck ✅ / test（4085）✅ / build（electron tsc）✅ / grep `"nomi:` 仅存于 `ipcChannels.ts`+测试断言 ✅。
+
+**B 阶段验收状态（方案 B）**：typecheck ✅ / test（4085）✅ / **catalog 域不再反向依赖 runtime 类型** ✅（类型归位到 tasks/taskTypes）。「`import from runtime` 无业务符号」**有意不达成**——方案 B 保留 runtime 作为公共 API barrel（31 个 re-export 保留），catalog→runtime 值依赖仅剩 2 个核心执行函数（buildProfileTaskResult/executeProfileOperation，合理中枢依赖）。
 
 ## 六、预期收益
 - **改一处动多处**痛点消除：A 让 channel 改名编译器全链报错；B 让 `TaskResult` 类改动收敛到单一归属域。
