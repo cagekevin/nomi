@@ -149,6 +149,12 @@ export const zhOnboardingProviders = {
       promoText: '如果你愿意，可以用我们的链接注册；不愿意也可以直接去官方注册。',
       promoCta: '用我们的链接',
     },
+    lovart: {
+      tagline: '本地 Lovart 网关 · APIMart 协议兼容',
+      credentialPlaceholder: '网关 user_key（OPEN_RELAY=true 可任意）',
+      credentialHint:
+        '本地 APIMart 兼容网关（后端 Lovart），默认 http://127.0.0.1:9004。.env 里 OPEN_RELAY=true 时 key 任意填；否则填 USER_KEYS 里配置的 user_key。凭证本地加密存储。',
+    },
     agnes: {
       tagline: '全模态免费 · 一个 key 解锁文本/图片/视频',
       credentialPlaceholder: '粘贴 Agnes API Key',
@@ -851,6 +857,12 @@ export const enOnboardingProviders = {
       tagline: 'One key unlocks every preset model',
       promoText: 'You can register with our link if you like, or go directly to the official website.',
       promoCta: 'Use our link',
+    },
+    lovart: {
+      tagline: 'Local Lovart gateway · APIMart-protocol compatible',
+      credentialPlaceholder: 'Gateway user_key (any when OPEN_RELAY=true)',
+      credentialHint:
+        'Local APIMart-compatible gateway (backend Lovart), default http://127.0.0.1:9004. With OPEN_RELAY=true in .env, any key works; otherwise use a user_key from USER_KEYS. Credentials are encrypted locally.',
     },
     agnes: {
       tagline: 'Free multimodal access · One key for text, image, and video',

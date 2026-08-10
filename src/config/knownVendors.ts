@@ -89,6 +89,18 @@ export const KNOWN_VENDORS: readonly KnownVendor[] = [
     },
   },
   {
+    // Lovart 本地网关（APIMart 协议兼容中转，用户自建，跑在 127.0.0.1:9004）。
+    // 独立 vendor + 独立卡：不碰 apimart（付费核心通道）。凭 OPEN_RELAY=true 时 key 任意。
+    vendorKey: 'lovart',
+    glyph: 'L',
+    tagline: '本地 Lovart 网关 · APIMart 协议兼容',
+    connectionTest: 'models',
+    credentialPlaceholder: '网关 user_key（OPEN_RELAY=true 可任意）',
+    credentialHint:
+      '本地 APIMart 兼容网关（后端 Lovart），默认 http://127.0.0.1:9004。.env 里 OPEN_RELAY=true 时 key 任意填；否则填 USER_KEYS 里配置的 user_key。凭证本地加密存储。',
+    promo: null,
+  },
+  {
     // Agnes AI（Sapiens AI，新加坡）：全模态 OpenAI 兼容网关，文本/图片/视频**无限期免费**
     // （2026-06-01 起，免费层 RPM 20）。一个 key 解锁三模态、邮箱注册不绑卡 → 新手零成本起点。
     vendorKey: 'agnes',

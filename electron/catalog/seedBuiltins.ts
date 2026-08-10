@@ -43,6 +43,10 @@ import { APIMART_IMAGE_MODELS, APIMART_IMAGE_QUERY, APIMART_IMAGE_STATUS } from 
 import { APIMART_VIDEO_MODELS, APIMART_VIDEO_QUERY, APIMART_VIDEO_STATUS } from "./apimartVideos";
 import { APIMART_AUDIO_MODELS } from "./apimartAudios";
 import { APIMART_TEXT_MODELS } from "./apimartTexts";
+import { LOVART_VENDOR_SEED } from "./lovartVendor";
+import { LOVART_IMAGE_MODELS, LOVART_IMAGE_QUERY, LOVART_IMAGE_STATUS } from "./lovartImages";
+import { LOVART_VIDEO_MODELS, LOVART_VIDEO_QUERY, LOVART_VIDEO_STATUS } from "./lovartVideos";
+import { LOVART_TEXT_MODELS } from "./lovartTexts";
 import { AGNES_VENDOR_SEED, AGNES_VIDEO_QUERY_OP, AGNES_STATUS_MAPPING } from "./agnesVendor";
 import { AGNES_IMAGE_MODELS } from "./agnesImages";
 import { AGNES_VIDEO_MODELS } from "./agnesVideos";
@@ -156,6 +160,28 @@ const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
   ...APIMART_AUDIO_MODELS.flatMap((m) =>
     m.mappings.map((mp) => ({
       id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name, create: mp.create,
+    })),
+  ),
+];
+
+/** Lovart 本地网关的 curated 模型 + mapping（独立 vendor，不碰 apimart）。 */
+const LOVART_CURATED_MODELS: CuratedModel[] = [
+  // 文本大脑（创作助手 / 拆镜头主控）：无 archetype / 无 mapping，走 buildLanguageModelForVendor 直连 chat。
+  ...LOVART_TEXT_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "text" as const })),
+  ...LOVART_IMAGE_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId })),
+  ...LOVART_VIDEO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "video" as const, archetypeId: m.archetypeId })),
+];
+const LOVART_CURATED_MAPPINGS: CuratedMapping[] = [
+  ...LOVART_IMAGE_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+      create: mp.create, query: LOVART_IMAGE_QUERY, statusMapping: LOVART_IMAGE_STATUS,
+    })),
+  ),
+  ...LOVART_VIDEO_MODELS.flatMap((m) =>
+    m.mappings.map((mp) => ({
+      id: mp.id, taskKind: mp.taskKind, modelKey: m.modelKey, name: mp.name,
+      create: mp.create, query: LOVART_VIDEO_QUERY, statusMapping: LOVART_VIDEO_STATUS,
     })),
   ),
 ];
@@ -452,6 +478,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // 供应商：kie + apimart（apimart 为核心变现通道）。
   if (seedVendor(vendors, KIE_VENDOR_SEED, now)) changed = true;
   if (seedVendor(vendors, APIMART_VENDOR_SEED, now)) changed = true;
+  if (seedVendor(vendors, LOVART_VENDOR_SEED, now)) changed = true; // Lovart 本地网关（APIMart 协议兼容，独立 vendor）
   if (seedVendor(vendors, AGNES_VENDOR_SEED, now)) changed = true; // Agnes AI（全模态免费网关）
   if (seedVendor(vendors, MODELSCOPE_VENDOR_SEED, now)) changed = true;
   if (seedVendor(vendors, VOLCENGINE_VENDOR_SEED, now)) changed = true;
@@ -474,6 +501,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // 模型 insert + 对账（两家各跑同一套逻辑）。
   if (reconcileModels(models, KIE_VENDOR_SEED.key, KIE_CURATED_MODELS, now)) changed = true;
   if (reconcileModels(models, APIMART_VENDOR_SEED.key, APIMART_CURATED_MODELS, now)) changed = true;
+  if (reconcileModels(models, LOVART_VENDOR_SEED.key, LOVART_CURATED_MODELS, now)) changed = true;
   if (reconcileModels(models, AGNES_VENDOR_SEED.key, AGNES_CURATED_MODELS, now)) changed = true;
   if (reconcileModels(models, MODELSCOPE_VENDOR_SEED.key, MODELSCOPE_CURATED_MODELS, now)) changed = true;
   if (reconcileModels(models, VOLCENGINE_VENDOR_SEED.key, VOLCENGINE_CURATED_MODELS, now)) changed = true;
@@ -505,6 +533,7 @@ export function applyBuiltinSeeds(state: CatalogState, now: string): { state: Ca
   // mapping insert + 对账（两家各跑同一套逻辑）。
   if (reconcileMappings(mappings, KIE_VENDOR_SEED.key, KIE_CURATED_MAPPINGS, now)) changed = true;
   if (reconcileMappings(mappings, APIMART_VENDOR_SEED.key, APIMART_CURATED_MAPPINGS, now)) changed = true;
+  if (reconcileMappings(mappings, LOVART_VENDOR_SEED.key, LOVART_CURATED_MAPPINGS, now)) changed = true;
   if (reconcileMappings(mappings, AGNES_VENDOR_SEED.key, AGNES_CURATED_MAPPINGS, now)) changed = true;
   if (reconcileMappings(mappings, MODELSCOPE_VENDOR_SEED.key, MODELSCOPE_CURATED_MAPPINGS, now)) changed = true;
   if (reconcileMappings(mappings, VOLCENGINE_VENDOR_SEED.key, VOLCENGINE_CURATED_MAPPINGS, now)) changed = true;
