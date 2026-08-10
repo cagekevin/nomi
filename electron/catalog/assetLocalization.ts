@@ -310,6 +310,9 @@ const CURATED_ASSET_INGESTION: Record<string, AssetIngestion> = {
   apimart: { strategy: "upload-multipart", endpoint: "https://api.apimart.ai/v1/uploads/images", urlPath: "url", accepts: ["image"] },
   // 魔搭：改图（Qwen-Image-Edit）的 image_url 直收 data URL（真实 E2E 验证 2026-06-19），无需上传端点。仅图片。
   modelscope: { strategy: "inline-base64", accepts: ["image"] },
+  // Lovart 本地网关（APIMart 协议兼容，main.py /v1/images/generations + /v1/videos/generations）：
+  // `resolve_attachments` 直收 data: base64（与 apimart 同构），无需上传端点。仅图片。
+  lovart: { strategy: "inline-base64", accepts: ["image"] },
 };
 
 // 视频/音频专用上传通道(按 vendor)。KIE file-stream-upload:multipart 流式二进制,大文件高效(~33%),

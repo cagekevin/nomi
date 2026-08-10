@@ -7,6 +7,10 @@
 import crypto from "node:crypto";
 import { streamTextTask } from "./ai/streamTextTask";
 import { firstReferenceImage } from "./catalog/taskParams";
+import { localizeAssetsForVendor, resolveAssetIngestionWithFallback } from "./catalog/assetLocalization";
+import { decryptApiKeyRecord } from "./catalog/secrets";
+import { readCatalog } from "./catalog/catalogStore";
+import { postJsonForAssetUpload, postMultipartForAssetUpload, readNomiLocalAsset } from "./assets/localAssetFile";
 import { firstString, trim } from "./jsonUtils";
 import { billingKindForTaskKind, findExecutableModelForTask } from "./runtime";
 import type { TaskRequest, TaskResult } from "./tasks/taskTypes";
@@ -24,7 +28,28 @@ export async function executeTextTask(input: {
   onDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<TaskResult> {
-  const imageUrl = input.kind === "image_to_prompt" ? firstReferenceImage(input.request) : "";
+  // image_to_prompt（聊天带图）走文本流：先把 extras 里的本地参考图（nomi-local://）按目标 vendor 策略
+  // 本地化（与 buildHttpRequest 的图生图/视频同一套：Lovart inline-base64 → data: URL，网关认 data:），
+  // 再取首图——否则 nomi-local:// 原样进 AI SDK，模型/网关解析不了（2026-08-10 实操修）。
+  let imageUrl = "";
+  if (input.kind === "image_to_prompt") {
+    const uploadCatalog = readCatalog();
+    const localized = await localizeAssetsForVendor(
+      input.request.extras,
+      (mediaKind) =>
+        resolveAssetIngestionWithFallback(
+          input.vendor,
+          uploadCatalog.vendors,
+          (key) => decryptApiKeyRecord(uploadCatalog.apiKeysByVendor[key]),
+          mediaKind,
+        ),
+      readNomiLocalAsset,
+      postJsonForAssetUpload,
+      postMultipartForAssetUpload,
+    );
+    const effectiveRequest = localized.uploaded > 0 ? { ...input.request, extras: localized.value as TaskRequest["extras"] } : input.request;
+    imageUrl = firstReferenceImage(effectiveRequest);
+  }
   const maxTokensValue = Number(input.request.extras?.maxTokens ?? input.request.extras?.max_tokens);
   const temperatureValue = Number(input.request.extras?.temperature);
   const { raw } = await streamTextTask(
