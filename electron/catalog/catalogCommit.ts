@@ -6,6 +6,9 @@ import { nativeWireProfileForArchetype, type NativeWireProfile } from "./nativeW
 import { guessModelKind } from "./modelKindHeuristic";
 import { hardenedFetchText } from "../hardenedFetch";
 import type { AiSdkProviderKind, BillingModelKind, HttpOperation, Model, ProfileKind, Vendor } from "./types";
+import { billingKindForTaskKind } from "./types";
+import { findExecutableModelForTask } from "./executableModel";
+import { buildProfileHttpRequest } from "./profileHttpRequest";
 import type { TaskRequest } from "../tasks/taskTypes";
 import {
   mutateCatalog,
@@ -530,13 +533,9 @@ export async function fetchModelCatalogDocs(payload: unknown): Promise<unknown> 
 }
 
 export async function testModelCatalogMapping(id: string, payload: unknown): Promise<unknown> {
-  const {
-    billingKindForTaskKind,
-    buildProfileHttpRequest,
-    buildProfileTaskResult,
-    executeProfileOperation,
-    findExecutableModelForTask,
-  } = await import("../runtime");
+  // 仅保留 runtime 核心执行函数（profile 真发请求 + 归一结果）；其余已静态 import 自 catalog 内部，
+  // 进一步收窄 catalog→runtime 值依赖面。执行函数归属 runtime 任务中枢（catalog 测 mapping 用中枢是合理依赖）。
+  const { buildProfileTaskResult, executeProfileOperation } = await import("../runtime");
   const mapping = readCatalog().mappings.find((item) => item.id === id);
   const raw = payload as JsonRecord | undefined;
   if (!mapping) {
