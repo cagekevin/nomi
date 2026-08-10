@@ -2,10 +2,11 @@
 // 异步旁路:localizeTaskAsset 落地文件后 fire-and-forget,任何失败只 console,
 // 绝不挡 addNodeResult 的用户感知(评测方案后端#8 裁定)。
 import crypto from "node:crypto";
-import { webContents as electronWebContents } from "electron";
 import { appendEvents } from "../events/eventLogRepository";
 import { runTechnicalCheck } from "./technicalCheck";
 import { EventChannels } from "../shared/ipcChannels";
+import { publishBroadcast } from "../events/eventBus";
+import { logger } from "../logger";
 
 export function scheduleTechnicalReview(input: {
   projectId: string;
@@ -32,13 +33,9 @@ export function scheduleTechnicalReview(input: {
         },
       ]);
       // 广播给所有窗口:渲染层把 verdict 写进节点 meta(⚠ 投影的数据源)。
-      for (const contents of electronWebContents.getAllWebContents()) {
-        if (!contents.isDestroyed()) {
-          contents.send(EventChannels.reviewEvent, { projectId: input.projectId, nodeId: input.nodeId || "", verdict });
-        }
-      }
+      publishBroadcast(EventChannels.reviewEvent, { projectId: input.projectId, nodeId: input.nodeId || "", verdict });
     } catch (error) {
-      console.error(`[review] 技术自检旁路失败(忽略): ${error instanceof Error ? error.message : String(error)}`);
+      logger.error("agent", "技术自检旁路失败(忽略)", error instanceof Error ? error : new Error(String(error)));
     }
   })();
 }

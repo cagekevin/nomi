@@ -61,6 +61,26 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     },
   },
   logRendererCrash: (message: unknown) => ipcRenderer.send(IpcChannels.logRendererCrash, message),
+  // 运行期日志（诊断）：渲染层上送 + 级别开关 + 崩溃/运行合并预览/导出。fire-and-forget 上送不阻塞渲染。
+  log: (level: unknown, scope: unknown, msg: unknown, meta?: unknown) =>
+    ipcRenderer.send(IpcChannels.logSend, { level, scope, msg, meta }),
+  diagnostics: {
+    getLevel: () => ipcRenderer.invoke(IpcChannels.logLevelGet) as Promise<string>,
+    setLevel: (level: unknown) => ipcRenderer.invoke(IpcChannels.logLevelSet, level) as Promise<string>,
+    get: () =>
+      ipcRenderer.invoke(IpcChannels.logDiagnosticsGet) as Promise<{
+        logLevel: string;
+        crash: string;
+        run: string;
+        meta: string;
+      }>,
+    export: () =>
+      ipcRenderer.invoke(IpcChannels.logDiagnosticsExport) as Promise<{
+        meta: string;
+        crash: string;
+        run: string;
+      }>,
+  },
   app: {
     reopenLibraryWindow: () => ipcRenderer.send(IpcChannels.appReopenLibraryWindow),
     hardReloadWindow: () => ipcRenderer.send(IpcChannels.appHardReloadWindow),

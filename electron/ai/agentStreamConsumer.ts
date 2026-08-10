@@ -11,6 +11,7 @@
 
 import type { AgentChatV2Hooks } from "../runtime";
 import { describeAgentError } from "./agentError";
+import { logger } from "../logger";
 
 type StreamChunk = {
   type: string;
@@ -51,14 +52,14 @@ export async function consumeAgentStreamWithTimeout(
     clearIdle();
     if (pendingToolCalls > 0) return;
     idleTimer = setTimeout(() => {
-      console.error(`[agentv2] 流中途 ${opts.idleTimeoutMs}ms 无新内容，abort（${opts.label}）`);
+      logger.error("agent", "流中途空闲超时，abort", new Error(`流式 ${opts.idleTimeoutMs / 1000}s 无新内容（端点中途挂起）`), { idleTimeoutMs: opts.idleTimeoutMs, label: opts.label });
       abortController.abort(new Error(`流式 ${opts.idleTimeoutMs / 1000}s 无新内容（端点中途挂起）`));
     }, opts.idleTimeoutMs);
   };
 
   const timer = setTimeout(() => {
     if (!firstChunkSeen) {
-      console.error(`[agentv2] 模型 ${opts.firstChunkTimeoutMs}ms 内无首字块，abort（${opts.label}）`);
+      logger.error("agent", "模型首字块超时，abort", new Error(`模型 ${opts.firstChunkTimeoutMs / 1000}s 内无响应（端点慢或挂起）`), { firstChunkTimeoutMs: opts.firstChunkTimeoutMs, label: opts.label });
       abortController.abort(new Error(`模型 ${opts.firstChunkTimeoutMs / 1000}s 内无响应（端点慢或挂起）`));
     }
   }, opts.firstChunkTimeoutMs);
@@ -120,7 +121,7 @@ export async function consumeAgentStreamWithTimeout(
         // 透传上游人话(根因1):APICallError 的 responseBody 里常有真原因(如"官方算力限制"),
         // 别只取 .message(=裸 HTTP 状态文本"Bad Request")。
         const message = describeAgentError(chunk.error);
-        console.error(`[agentv2] stream error chunk: ${message}`);
+        logger.error("agent", "stream error chunk", chunk.error instanceof Error ? chunk.error : new Error(message));
         hooks.emit({ type: "error", message });
       }
       // tool-call / tool-result 已在各工具 execute 里 emit，这里忽略 SDK 镜像事件避免重复。
@@ -128,7 +129,7 @@ export async function consumeAgentStreamWithTimeout(
   } catch (streamError: unknown) {
     // abort（首字块超时）或流式异常 → 收口成 error 事件，避免 UI 永远「处理中」。
     const message = describeAgentError(streamError);
-    console.error(`[agentv2] 流式中断: ${message}`);
+    logger.error("agent", "流式中断", streamError instanceof Error ? streamError : new Error(message));
     hooks.emit({ type: "error", message });
     hooks.emit({ type: "finish", finishReason: "error", usage: finalUsage });
     return { finalText, finalFinish: "error", finalUsage, ok: false };

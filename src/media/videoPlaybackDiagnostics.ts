@@ -1,4 +1,5 @@
 import { buildVideoPlaybackUrl } from './videoPlaybackUrl'
+import { logger } from '../utils/logger'
 
 export type VideoPlaybackFailureDiagnostics = {
   rawVideoUrl: string
@@ -70,6 +71,12 @@ export async function diagnoseVideoPlaybackFailure(
 }
 
 export function logVideoPlaybackFailure(diagnostics: VideoPlaybackFailureDiagnostics): void {
+  // 视频播放失败进运行日志（asset scope，含 mediaErrorCode 供比对），不丢 console 镜像（web/测试无桥）。
+  logger.error('asset', 'video playback failure', new Error(diagnostics.probeMessage), {
+    mediaErrorCode: diagnostics.mediaErrorCode,
+    mediaErrorMessage: diagnostics.mediaErrorMessage,
+    rawVideoUrl: diagnostics.rawVideoUrl,
+  })
   console.error('[nomi-video-playback-failure]', diagnostics)
 }
 

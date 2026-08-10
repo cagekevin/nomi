@@ -1,3 +1,4 @@
+import { publishBroadcast } from "../events/eventBus";
 import { EventChannels } from "../shared/ipcChannels";
 
 // 素材写入层的回流广播：writeAsset/moveAssetFile 落盘后通知所有窗口刷新。
@@ -7,13 +8,5 @@ import { EventChannels } from "../shared/ipcChannels";
 // fire-and-forget：动态 import 在 vitest 纯 node 环境会 reject（无 electron）→ 静默 no-op，
 // 不影响纯函数测试；主进程里 CJS 输出等价于惰性 require。
 export function broadcastAssetsUpdated(projectId: string): void {
-  void import("electron")
-    .then(({ BrowserWindow }) => {
-      for (const win of BrowserWindow.getAllWindows()) {
-        if (!win.isDestroyed()) win.webContents.send(EventChannels.assetsUpdated, { projectId });
-      }
-    })
-    .catch(() => {
-      /* 测试环境无 electron → no-op */
-    });
+  publishBroadcast(EventChannels.assetsUpdated, { projectId });
 }

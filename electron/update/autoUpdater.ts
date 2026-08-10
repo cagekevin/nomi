@@ -1,6 +1,7 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, ipcMain, shell } from "electron";
 import { desktopT } from "../i18n";
 import { EventChannels, IpcChannels } from "../shared/ipcChannels";
+import { publishBroadcast } from "../events/eventBus";
 
 // 版本号 + 检查更新 + 一键更新（功能需求 1/2/3）。
 // GitHub Releases provider 由 package.json build.publish 自动派生，无需额外服务器。
@@ -26,9 +27,7 @@ const RELEASE_PAGE_URL = "https://github.com/aqm857886159/Nomi/releases/latest";
 const CAN_AUTO_INSTALL = process.platform !== "darwin";
 
 function broadcast(payload: Record<string, unknown>): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(EVENT_CHANNEL, payload);
-  }
+  publishBroadcast(EVENT_CHANNEL, payload);
 }
 
 function describeError(error: unknown): string {

@@ -19,6 +19,13 @@ export const IpcChannels = {
   appHardReloadWindow: "nomi:app:hard-reload-window",
   logRendererCrash: "nomi:log:renderer-crash",
 
+  // ── 运行期日志（诊断）─────────────────────────────────────────────
+  logSend: "nomi:log:send", // 渲染层上送日志（fire-and-forget，ipcRenderer.send）
+  logLevelGet: "nomi:log:level:get",
+  logLevelSet: "nomi:log:level:set",
+  logDiagnosticsGet: "nomi:log:diagnostics:get", // 崩溃 + 运行合并预览
+  logDiagnosticsExport: "nomi:log:diagnostics:export", // 导出 zip 内容 + meta.json
+
   windowMinimize: "nomi:window:minimize",
   windowMaximize: "nomi:window:maximize",
   windowClose: "nomi:window:close",

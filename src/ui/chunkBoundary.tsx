@@ -10,6 +10,7 @@
 import React from 'react'
 import { cn } from '../utils/cn'
 import i18n from '../i18n'
+import { logger } from '../utils/logger'
 
 const AUTO_RETRIES = 2
 const RETRY_BASE_DELAY_MS = 300
@@ -122,7 +123,7 @@ class ChunkErrorBoundary extends React.Component<BoundaryProps, { error: Error |
     } catch {
       /* 日志旁路失败不影响降级 UI */
     }
-    console.error(`[nomi] chunk boundary "${this.props.label}" caught:`, error)
+    logger.error('lifecycle', 'chunk boundary caught load error', error, { label: this.props.label })
     if (isChunkLoadNetworkError(error) && canAutoReloadChunk(this.props.label)) {
       this.autoReloadTimer = window.setTimeout(reloadRendererWindow, CHUNK_AUTO_RELOAD_DELAY_MS)
     }

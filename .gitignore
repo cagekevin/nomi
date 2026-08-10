@@ -1,87 +1,58 @@
-# Dependencies
+# ═══════════════════════════════════════════════════════════════════════════
+# Nomi · .gitignore
+# 纪律：只忽略产物/私有数据/本地派生，绝不误伤源文件。改动需过 check:filesize
+# ═══════════════════════════════════════════════════════════════════════════
+
+# ── 依赖 ────────────────────────────────────────────────────────────────
 node_modules/
 .pnpm-store/
 .npm-cache/
+.eslintcache
+.prettiercache
 
-# Build output
+# ── 构建产物 ─────────────────────────────────────────────────────────────
 dist/
 dist-electron/
 dist-local/
 release/
+build-electron/
 .tmp/
 .turbo/
 coverage/
-test-results/
-playwright-report/
 *.tsbuildinfo
 public/tailwind.generated.css
 src/styles/tailwind.generated.css
 
-# Environment and local secrets
+# ── 测试产物 ─────────────────────────────────────────────────────────────
+test-results/
+playwright-report/
+vitest-exit.txt
+vitest-src.json
+
+# ── 环境与密钥（本地私有，绝不入库）──────────────────────────────────
 .env
 .env.*
-
-# Runtime data
+!.env.example
+!.env.example.*
 project-data/
 .data/
 **/.data/
+artifacts/
+
+# ── 用户/AI 会话本地数据 ───────────────────────────────────────────────
 .agents/
 .claude/
 .tapcanvas/
-artifacts/
+.codex/
 orchestration/
 
-# OS / editor
-.DS_Store
-*.log
-*.out
-*.err
-.vscode/
-
-# Temporary release and design work
-temp-web-design-skill/
-nomi-landing/
-landing-page-*.html
-
-.tmp
-dist-electron
-
-# Onboarding lab — local secrets + per-trial outputs
-.secrets/
-docs/onboarding-trials/20*/
-
-# UX 走查截图产物（规则13）—— 不入库
-tests/ux/shots/
-tests/ux/__shots__/
-tests/ux/_stagingshot/
-tests/ux/_marketing/
-tests/system/runs/
-.scene3d-ux-lab/
-.scene3d-panorama-lab/
-.onboarding-demo-lab/
-.video-playback-heal-lab/
-.library-cover-walk-lab/
-.project-asset-healthcheck-lab/
-.toolbar-order-lab/
-
-# 3D 预设动作校准台的本地输出（pose-lab）
-.pose-lab/
-.pose-lab-vite.log
-
-# 浏览器自动化测试 profile 缓存（含 Service Worker 缓存里的第三方 key，绝不入库）
-.independent-retest/
-
-.tmp/
-
-# 下载量可视化看板：派生产物（pnpm stats:html 按需生成），数据每次都变故不提交
-docs/stats/dashboard.html
-
-# ── Feedback Radar 用户私有数据（微信聊天记录/评论/昵称/db_key）· 安全系统见 docs/security/ ──
-# whitelist 模式：docs/feedback/ 默认全部 ignore，只放行模板与说明（防"一不留神"新数据文件进 git）
+# ── Feedback Radar 用户私有数据 · 安全见 docs/security/ ────────────────
+# whitelist 模式：docs/feedback/ 默认全 ignore，只放行模板与说明
 docs/feedback/*
 !docs/feedback/sources.example.json
 !docs/feedback/README.md
-# 微信取钥产物 / WeLive 配置 / 数据库文件——任何位置都不许进 git
+
+# ── 微信取钥产物 / WeLive 配置 / 数据库 —— 任何位置都不许进 git ───────
 **/welive.yaml
 **/welive.yml
 **/all_keys.json
@@ -90,13 +61,42 @@ docs/feedback/*
 **/wechat-export/
 *.db
 
-# R13 走查截图产物（scripts/*-walkthrough.mjs 输出，纯本地证据，不进 git）
-# 通用模式覆盖所有 .{name}-walk/ 输出目录；不合模式的特例单列
+# ── 走查/试跑/校准台截图产物（本地证据，不入库）────────────────────────
+tests/ux/shots/
+tests/ux/__shots__/
+tests/ux/_stagingshot/
+tests/ux/_marketing/
+tests/system/runs/
+# 通用模式覆盖所有 .{name}-walk/ 与 .*-lab/ 输出；不合模式的特例单列
 .*-walk/
+.*-lab/
 .failure-walk-ok/
 .model-panel-shot/
 .custom-call-recon/
+.relay-fallback-walk/
+.ue-spike-walk/
+.pose-lab/
+.pose-lab-vite.log
+.independent-retest/
 
-# Python 运行副产物（decrypt_wechat.py 等被 import/执行时生成，绝不入库）
+# ── 临时/一次性设计与着陆页 ─────────────────────────────────────────────
+temp-web-design-skill/
+nomi-landing/
+landing-page-*.html
+
+# ── 派生产物（按需生成，不提交）──────────────────────────────────────────
+docs/stats/dashboard.html
+docs/onboarding-trials/20*/
+
+# ── Python 运行副产物 ──────────────────────────────────────────────────
 __pycache__/
 *.pyc
+
+# ── 系统 / 编辑器 ───────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.log
+*.out
+*.err
+.vscode/
+.idea/

@@ -6,6 +6,7 @@
 import { ipcMain, webContents as electronWebContents } from "electron";
 import type { WebContents } from "electron";
 import { EventChannels, IpcChannels } from "../shared/ipcChannels";
+import { publishTo } from "../events/eventBus";
 
 type TextStreamSession = {
   streamId: string;
@@ -23,8 +24,7 @@ function loadTextTaskRunner(): Promise<typeof import("../textTaskRunner")> {
 
 function sendTextEvent(session: TextStreamSession, event: unknown): void {
   const target: WebContents | undefined = electronWebContents.fromId(session.webContentsId) || undefined;
-  if (!target || target.isDestroyed()) return;
-  target.send(EventChannels.tasksTextEvent, { streamId: session.streamId, event });
+  publishTo(target!, EventChannels.tasksTextEvent, { streamId: session.streamId, event });
 }
 
 export function registerTextStreamIpc(): void {

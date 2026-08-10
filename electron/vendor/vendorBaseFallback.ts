@@ -20,6 +20,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { logger } from "../logger";
 
 type VendorBaseFamily = {
   vendorKey: string;
@@ -95,7 +96,7 @@ function persist(): void {
     fs.mkdirSync(path.dirname(stateFilePath), { recursive: true });
     fs.writeFileSync(stateFilePath, JSON.stringify({ version: STATE_VERSION, overrides }, null, 2), "utf8");
   } catch (error) {
-    console.error("[nomi:vendor-base] 持久化 override 失败（忽略，内存态仍生效）:", error);
+    logger.error("proxy", "persist vendor base override failed (ignored)", error instanceof Error ? error : new Error(String(error)));
   }
 }
 
@@ -167,16 +168,16 @@ async function runLadder(family: VendorBaseFamily, failedOrigin: string): Promis
     if (await probeCandidate(candidate, family.marker)) {
       if (candidate === normalizeOrigin(family.primary)) {
         delete overrides[family.vendorKey];
-        console.log(`[nomi:vendor-base] ${family.vendorKey} 主域可达，清除 override`);
+        logger.info("proxy", "vendor main domain reachable, cleared override", { vendorKey: family.vendorKey });
       } else {
         overrides[family.vendorKey] = candidate;
-        console.log(`[nomi:vendor-base] ${family.vendorKey} 主域不可达，已切官方备用域 ${candidate}`);
+        logger.warn("proxy", "vendor main domain unreachable, switched to official fallback", { vendorKey: family.vendorKey, fallback: candidate });
       }
       persist();
       return;
     }
   }
-  console.log(`[nomi:vendor-base] ${family.vendorKey} 全部候选域不可达，维持现状`);
+  logger.warn("proxy", "all vendor fallback domains unreachable, keep current", { vendorKey: family.vendorKey });
 }
 
 /**
@@ -205,7 +206,7 @@ export async function restorePrimaryIfHealthy(vendorKey: string): Promise<void> 
   if (await probeCandidate(normalizeOrigin(family.primary), family.marker)) {
     delete overrides[vendorKey];
     persist();
-    console.log(`[nomi:vendor-base] ${vendorKey} 主域已恢复，回切主域`);
+    logger.info("proxy", "vendor main domain recovered, switch back", { vendorKey });
   }
 }
 

@@ -10,6 +10,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { logger } from "../logger";
 import { spawn } from "node:child_process";
 
 import { resolveFfmpegPath } from "../export/ffmpegRunner";
@@ -134,10 +135,9 @@ export async function ensurePlayableVideoBytes(
       playbackNormalizedFrom: transcoded.reason,
     };
   } catch (error) {
-    console.warn(
-      "[nomi-video-import] playability normalize failed, importing original bytes:",
-      error instanceof Error ? error.message : error,
-    );
+    logger.warn("asset", "playability normalize failed, importing original bytes", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     return passthrough;
   } finally {
     if (tempDir) fs.rmSync(tempDir, { recursive: true, force: true });

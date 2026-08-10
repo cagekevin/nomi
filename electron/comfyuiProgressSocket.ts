@@ -14,6 +14,7 @@ import { WebSocket } from "undici";
 import { readCatalog } from "./catalog/catalogStore";
 import { COMFYUI_VENDOR_KEY, isComfyuiVendor } from "./catalog/types";
 import { EventChannels } from "./shared/ipcChannels";
+import { publishTo } from "./events/eventBus";
 
 export const COMFYUI_PROGRESS_CHANNEL = EventChannels.tasksComfyuiProgress;
 
@@ -95,7 +96,7 @@ export function computeOverallPercent(startedCount: number, currentRatio: number
 function send(entry: WatchEntry, event: Omit<ComfyuiProgressEvent, "promptId" | "nodeId" | "projectId">): void {
   const target = webContents.fromId(entry.webContentsId);
   if (!target || target.isDestroyed()) return;
-  target.send(COMFYUI_PROGRESS_CHANNEL, {
+  publishTo(target, COMFYUI_PROGRESS_CHANNEL, {
     promptId: entry.promptId,
     nodeId: entry.nodeId,
     projectId: entry.projectId,

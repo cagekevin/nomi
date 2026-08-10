@@ -167,7 +167,7 @@ const APIMART_CURATED_MAPPINGS: CuratedMapping[] = [
 /** Lovart 本地网关的 curated 模型 + mapping（独立 vendor，不碰 apimart）。 */
 const LOVART_CURATED_MODELS: CuratedModel[] = [
   // 文本大脑（创作助手 / 拆镜头主控）：无 archetype / 无 mapping，走 buildLanguageModelForVendor 直连 chat。
-  ...LOVART_TEXT_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "text" as const })),
+  ...LOVART_TEXT_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "text" as const, meta: m.meta as Record<string, unknown> | undefined })),
   ...LOVART_IMAGE_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "image" as const, archetypeId: m.archetypeId })),
   ...LOVART_VIDEO_MODELS.map((m) => ({ modelKey: m.modelKey, labelZh: m.labelZh, kind: "video" as const, archetypeId: m.archetypeId })),
 ];
@@ -419,7 +419,11 @@ function reconcileModels(models: Model[], vendorKey: string, curated: CuratedMod
     const paramsDrift = c.meta?.parameters !== undefined && JSON.stringify(exMeta.parameters) !== JSON.stringify(c.meta.parameters);
     // canonicalModelId 同为代码所有：缺失/漂移强制对账（老装机自愈，去重键才可靠）。
     const canonicalDrift = canonicalId !== undefined && exMeta.canonicalModelId !== canonicalId;
-    const drift = ex.kind !== c.kind || (Boolean(c.archetypeId) && exArch !== c.archetypeId) || paramsDrift || canonicalDrift;
+    // 代码所有的 meta 标量键（如 supportsImageInput）缺失/漂移也要对账（老装机自愈：
+    // 否则 LOVART_TEXT_MODELS 事后补 supportsImageInput=true 时，已存在的老 model 不会被更新 → 图片继续被丢）。
+    const curatedMetaKeys = Object.keys(c.meta || {}).filter((k) => k !== "parameters" && k !== "archetypeId" && k !== "canonicalModelId");
+    const metaDrift = curatedMetaKeys.some((k) => !Object.is(exMeta[k], (c.meta as Record<string, unknown>)[k]));
+    const drift = ex.kind !== c.kind || (Boolean(c.archetypeId) && exArch !== c.archetypeId) || paramsDrift || canonicalDrift || metaDrift;
     if (drift) {
       const nextMeta = { ...exMeta, ...curatedMeta };
       models[i] = {

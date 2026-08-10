@@ -10,7 +10,9 @@
  * 模型（混元3D/HiTem3D/Meshy）一进来就白屏。这里改成动态 Map + 未知 kind 兜底，单一真相源收口在此。
  */
 
-export type ModelChipKind = 'text' | 'image' | 'video' | 'audio' | 'model3d'
+// ModelChipKind 已下沉到共享 config（src/config/modelChip.ts）；这里 re-export 保持既有
+// 引用方（ModelChipGroups.tsx 等）从本文件拿类型不变。
+export type { ModelChipKind } from '../../config/modelChip'
 
 export const MODEL_CHIP_KIND_LABEL: Record<string, string> = {
   text: '文本',

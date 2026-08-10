@@ -17,6 +17,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import type { LanguageModelV1 } from "ai";
 import { applyProfileToRequestBody, getModelProfile } from "./modelProfiles";
+import { logger } from "../logger";
 // 单一真相源：provider-kind 联合定义在 catalog/types，这里只 re-export，避免并行定义漂移（规则 1）。
 import type { AiSdkProviderKind } from "../catalog/types";
 export type { AiSdkProviderKind };
@@ -69,11 +70,11 @@ function buildProfiledFetch(modelId: string): typeof fetch {
       if (!res.ok) {
         let snippet = "";
         try { snippet = (await res.clone().text()).replace(/\s+/g, " ").slice(0, 300); } catch { /* body unreadable */ }
-        console.error(`[vendor-http] ${res.status} ${res.statusText} ← ${urlStr} (model=${modelId}) :: ${snippet}`);
+        logger.warn("catalog", "vendor http non-ok status", { status: res.status, statusText: res.statusText, url: urlStr, model: modelId, snippet });
       }
       return res;
     } catch (fetchError: unknown) {
-      console.error(`[vendor-http] fetch threw ← ${urlStr} (model=${modelId}) :: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`);
+      logger.error("catalog", "vendor fetch threw", fetchError instanceof Error ? fetchError : new Error(String(fetchError)), { url: urlStr, model: modelId });
       throw fetchError;
     }
   }) as typeof fetch;

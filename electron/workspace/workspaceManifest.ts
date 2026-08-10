@@ -4,6 +4,7 @@ import path from "node:path";
 import { extensionFromMime, localAssetUrl } from "../assets/assetPaths";
 import { parseDataUrl } from "../assets/assetBytes";
 import { readJsonFile, writeJsonFileAtomic } from "../jsonFile";
+import { logger } from "../logger";
 import {
   workspaceAssetsGeneratedDir,
   workspaceAssetsImportedDir,
@@ -170,7 +171,7 @@ export function readWorkspaceManifest(rootPath: string): WorkspaceProjectRecordV
       throw error;
     }
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[workspace] failed to read workspace manifest: ${rootPath} (${message})`);
+    logger.warn("project", "failed to read workspace manifest", { rootPath, message });
     return null;
   }
 }

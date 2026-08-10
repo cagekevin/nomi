@@ -16,7 +16,8 @@ import { getDesktopBridge } from '../../desktop/bridge'
 import { confirmDialog } from '../../design'
 import type { KnownVendor } from '../../config/knownVendors'
 import { FoldableModelCard } from './FoldableModelCard'
-import { ModelChipGroups, type ChipModel } from './ModelChipGroups'
+import { ModelChipGroups } from './ModelChipGroups'
+import type { ChipModel } from '../../config/modelChip'
 
 type VendorOnboardCardProps = {
   directory: KnownVendor

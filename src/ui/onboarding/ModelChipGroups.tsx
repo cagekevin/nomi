@@ -10,20 +10,8 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { IconCheck, IconX } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
-import { groupModelsByKind, sortEnabledFirst, type ModelChipKind } from './modelChipGrouping'
-
-export type ChipModel = {
-  modelKey: string
-  vendorKey: string
-  labelZh: string
-  kind: ModelChipKind
-  /** 是否启用（enabled:false 的模型不进生成下拉/runtime，供中转站批量启停编辑用）。 */
-  enabled: boolean
-  /** 后端模型扩展信息；通用 chip 不消费，专用卡可透传读取。 */
-  meta?: unknown
-  /** 该模型是否已设自定义调用脚本（模型行图标点亮 + 角标；chip 不消费）。 */
-  hasCustomCall?: boolean
-}
+import type { ChipModel } from '../../config/modelChip'
+import { groupModelsByKind, sortEnabledFirst } from './modelChipGrouping'
 
 type ModelChipGroupsProps = {
   models: ChipModel[]

@@ -159,6 +159,14 @@ export async function openDesktopAgentsChatStream(
   }
 
   try {
+    // ---- A:渲染层发起点确认附件是否随 payload 发出(console.debug,仅带附件) ----
+    if (payload.attachments && payload.attachments.length > 0) {
+      console.debug('[nomi:agent:A] chat start with attachments', {
+        count: payload.attachments.length,
+        each: payload.attachments.map((a) => ({ urlPrefix: a.url.slice(0, 60), kind: a.kind, contentType: a.contentType })),
+        sessionKey: payload.sessionKey,
+      })
+    }
     const start = await desktop.agents.chatV2Start(payload)
     sessionId = start.sessionId
 

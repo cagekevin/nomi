@@ -1,7 +1,7 @@
 import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { IconArrowRight, IconBrowser, IconPlugConnected, IconSettings } from '@tabler/icons-react'
-import type { WorkspaceMode } from '../../workbench/workbenchStore'
+import type { WorkspaceMode } from '../../config/workspaceMode'
 import {
   NomiBrand,
   NomiStepper,
@@ -11,9 +11,6 @@ import {
   TooltipTrigger,
   WorkbenchButton,
 } from '../../design'
-import { OnboardingChecklist } from '../../workbench/onboarding/OnboardingChecklist'
-import { TaskCenterButton } from '../../workbench/taskCenter/TaskCenterButton'
-import { useGenerationCanvasStore } from '../../workbench/generationCanvas/store/generationCanvasStore'
 import { cn } from '../../utils/cn'
 import { APP_BAR_ACTION_GROUPS } from './appBarActionGroups'
 
@@ -38,22 +35,25 @@ type NomiAppBarProps = {
   workspaceMode: WorkspaceMode
   onWorkspaceModeChange: (mode: WorkspaceMode) => void
   projectName?: string
-  projectId?: string | null
   onBackToLibrary?: () => void
   onOpenModelCatalog?: () => void
   onOpenSettings?: () => void
   onRenameProject?: (name: string) => void
+  // 通用外壳只声明插槽、不 import 业务组件：上手清单/任务中心由组合层以 props 注入。
+  onboardingChecklist?: React.ReactNode
+  taskCenterButton?: React.ReactNode
 }
 
 export default function NomiAppBar({
   workspaceMode,
   onWorkspaceModeChange,
   projectName,
-  projectId,
   onBackToLibrary,
   onOpenModelCatalog,
   onOpenSettings,
   onRenameProject,
+  onboardingChecklist,
+  taskCenterButton,
 }: NomiAppBarProps): JSX.Element {
   const { t } = useTranslation()
   const [editingProjectName, setEditingProjectName] = React.useState(false)
@@ -215,13 +215,7 @@ export default function NomiAppBar({
             'inline-flex items-center gap-2.5',
           )}
         >
-          <TaskCenterButton
-            projectId={projectId}
-            onRevealNode={(nodeId) => {
-              onWorkspaceModeChange('generation')
-              useGenerationCanvasStore.getState().selectNodes([nodeId])
-            }}
-          />
+          {taskCenterButton}
           <span className={cn('nomi-appbar__divider', 'w-px h-[18px] bg-workbench-border')} aria-hidden="true" />
         </span>
 
@@ -235,7 +229,7 @@ export default function NomiAppBar({
           )}
         >
           <span className="inline-flex items-center gap-1">
-            {!isWindows ? <OnboardingChecklist /> : null}
+            {!isWindows ? onboardingChecklist : null}
             {!isWindows ? (
               <AppBarActionTooltip label={t('appBar.browser')}>
                 <WorkbenchButton

@@ -18,6 +18,7 @@ import {
 import { buildProductionDeepLink } from './productionDeepLink'
 import { safeExternalText, safeProductionContract } from './productionRunProjectionSanitizer'
 import { readAutomationPolicySettings } from '../settings/automationPolicySettings'
+import { logger } from '../logger'
 import type {
   AutomationPolicy,
   CreateProductionRunInput,
@@ -333,7 +334,7 @@ export function createProductionRunService(deps: ServiceDeps = {}) {
           // Preserve the original planning failure; the run remains inspectable on disk.
         }
       }
-      console.error('[nomi:production] storyboard planning failed:', error instanceof Error ? error.message : String(error))
+      logger.error('export', 'storyboard planning failed', error instanceof Error ? error : new Error(String(error)))
     } finally {
       inFlight.delete(run.runId)
     }
@@ -434,7 +435,7 @@ export function createProductionRunService(deps: ServiceDeps = {}) {
           if (current.status !== 'needs_attention') {
             try { current = executeInternal(run.projectId, run.runId, current, 'run.status', { status: 'needs_attention' }, `driver-${run.runId}-generation-attention-${current.revision}`).run } catch { /* preserve unknown job state */ }
           }
-          console.error('[nomi:production] generation driver stopped:', error instanceof Error ? error.message : String(error))
+          logger.error('export', 'generation driver stopped', error instanceof Error ? error : new Error(String(error)))
           return
         }
       }
@@ -453,7 +454,7 @@ export function createProductionRunService(deps: ServiceDeps = {}) {
       current = executeInternal(run.projectId, run.runId, current, 'stage.upsert', { stage: stageValue(current, 'assemble', { status: 'completed', completedAt: new Date().toISOString() }) }, `driver-${run.runId}-stage-assemble-complete`).run
       current = executeInternal(run.projectId, run.runId, current, 'run.status', { status: 'awaiting_rough_cut_review' }, `driver-${run.runId}-rough-cut`).run
     } catch (error) {
-      console.error('[nomi:production] generation/assembly driver failed:', error instanceof Error ? error.message : String(error))
+      logger.error('export', 'generation/assembly driver failed', error instanceof Error ? error : new Error(String(error)))
     } finally {
       inFlight.delete(run.runId)
     }
@@ -476,7 +477,7 @@ export function createProductionRunService(deps: ServiceDeps = {}) {
       if (current && current.status === 'exporting') {
         try { executeInternal(run.projectId, run.runId, current, 'run.status', { status: 'needs_attention' }, `driver-${run.runId}-export-attention-${current.revision}`) } catch { /* preserve export error */ }
       }
-      console.error('[nomi:production] export driver failed:', error instanceof Error ? error.message : String(error))
+      logger.error('export', 'export driver failed', error instanceof Error ? error : new Error(String(error)))
     } finally {
       inFlight.delete(run.runId)
     }
@@ -716,7 +717,7 @@ export function createProductionRunService(deps: ServiceDeps = {}) {
         if (current.status === 'ready') void driveGeneration(current)
       }
     } catch (error) {
-      console.error('[nomi:production] recovery scan failed:', error instanceof Error ? error.message : String(error))
+      logger.error('export', 'recovery scan failed', error instanceof Error ? error : new Error(String(error)))
     } finally {
       recoveryInFlight.delete(safeProjectId)
     }

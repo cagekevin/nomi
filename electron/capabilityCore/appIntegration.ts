@@ -12,6 +12,7 @@ import { ensureToken } from './security'
 import { clearInstanceAdvertisement, writeInstanceAdvertisement } from './lockfile'
 import type { FetchTaskResultFn, RunTaskFn } from './core'
 import { getProductionRunService } from '../productionRun/productionRunRuntime'
+import { logger } from '../logger'
 
 let handle: RpcServerHandle | null = null
 let openProjectId = ''
@@ -45,9 +46,9 @@ export async function startCapabilityCore(runTask: RunTaskFn, fetchTaskResult: F
       startedAt: Date.now(),
       version: app.getVersion(),
     })
-    console.log(`[nomi:capability-core] RPC 监听 127.0.0.1:${handle.port}`)
+    logger.info('catalog', 'capability core RPC listening', { port: handle.port })
   } catch (error) {
-    console.error('[nomi:capability-core] 启动失败（不影响 app）:', error)
+    logger.error('catalog', 'capability core startup failed (app unaffected)', error instanceof Error ? error : new Error(String(error)))
   }
 }
 

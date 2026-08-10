@@ -30,6 +30,7 @@ import { cn } from '../utils/cn'
 import { toast } from '../ui/toast'
 import { setDesktopActiveProjectId } from '../desktop/activeProject'
 import { getDesktopBridge } from '../desktop/bridge'
+import { logger } from '../utils/logger'
 import { useHasTextModel } from './library/useHasTextModel'
 import { SplashIntro } from './onboarding/SplashIntro'
 import { hasSeenSplash, markSplashSeen, hasSeenJourneyTour } from './onboarding/onboardingState'
@@ -238,7 +239,7 @@ export default function NomiStudioApp(): JSX.Element {
         setActiveProject,
         setView,
         onSaveError: (error) => {
-          console.error('project save error', error)
+          logger.error('project', 'project save error', error)
           toast(t('studio.projectSaveFailed'), 'error')
         },
       })
@@ -280,7 +281,7 @@ export default function NomiStudioApp(): JSX.Element {
       void import('./project/workbenchProjectSession')
         .then(({ persistActiveWorkbenchProjectNow }) => persistActiveWorkbenchProjectNow())
         .catch((error: unknown) => {
-          console.error('hard reload save error', error)
+          logger.error('project', 'hard reload save error', error)
         })
         .finally(() => {
           desktop.app?.hardReloadWindow?.()
@@ -334,7 +335,7 @@ export default function NomiStudioApp(): JSX.Element {
           }
         }
         if (!hydrated) {
-          if (hydrateError) console.error('project hydrate failed', hydrateError)
+          if (hydrateError) logger.error('project', 'project hydrate failed', hydrateError)
           refreshProjects()
           return false
         }
@@ -393,7 +394,7 @@ export default function NomiStudioApp(): JSX.Element {
         }
         useGenerationCanvasStore.getState().setGenerationAiCollapsed(false)
         await useProductionRunStore.getState().navigateTo(projectId, runId, payload.artifactId)
-      })().catch((error) => console.error('production deep link failed', error))
+      })().catch((error) => logger.error('project', 'production deep link failed', error))
     })
   }, [hydrateProject])
 
@@ -443,7 +444,7 @@ export default function NomiStudioApp(): JSX.Element {
   const newProject = React.useCallback(() => {
     // 「新建项目」：默认位置建项目，落「创作」区（CTA「从一段文字或想法开始」）。
     void createAndOpenProject({ workspaceMode: 'creation' }).catch((error) => {
-      console.error('new project error', error)
+      logger.error('project', 'new project error', error)
       toast(t('studio.newProjectFailed'), 'error')
     })
   }, [createAndOpenProject, t])
@@ -464,7 +465,7 @@ export default function NomiStudioApp(): JSX.Element {
       })
       if (result.opened) useJourneyTourStore.getState().start()
     })().catch((error) => {
-      console.error('journey tour project error', error)
+      logger.error('project', 'journey tour project error', error)
       toast(t('studio.demoProjectFailed'), 'error')
     })
   }, [createAndOpenProject, t])
@@ -512,7 +513,7 @@ export default function NomiStudioApp(): JSX.Element {
         toast(isExternal ? t('studio.projectRemoved') : t('studio.projectDeleted'), 'success')
       } catch (error: unknown) {
         const message = error instanceof Error && error.message ? error.message : t('studio.projectDeleteFailed')
-        console.error(message)
+        logger.error('project', 'project delete failed', error, { message })
         toast(message, 'error')
       }
     },
@@ -528,7 +529,7 @@ export default function NomiStudioApp(): JSX.Element {
           setActiveProject((prev) => (prev && prev.id === projectId ? { ...prev, name: record.name } : prev))
         }
       } catch (error: unknown) {
-        console.error('project rename error', error)
+        logger.error('project', 'project rename error', error)
         toast(t('studio.renameFailed'), 'error')
       }
     },
@@ -557,7 +558,7 @@ export default function NomiStudioApp(): JSX.Element {
       })
       .catch((error: unknown) => {
         const message = error instanceof Error && error.message ? error.message : t('studio.projectRestoreFailed')
-        console.error(message)
+        logger.error('project', 'project restore failed', error, { message })
       })
       .finally(() => {
         if (!cancelled) hydratingProjectRef.current = false
@@ -594,7 +595,7 @@ export default function NomiStudioApp(): JSX.Element {
           }
         },
         onSaveError: (error) => {
-          console.error('project save error', error)
+          logger.error('project', 'project save error', error)
           toast(t('studio.projectSaveFailed'), 'error')
         },
       })
@@ -657,7 +658,7 @@ export default function NomiStudioApp(): JSX.Element {
           return service.persistProject(renamed, readCurrentWorkbenchProjectPayload())
         })
         .catch((error: unknown) => {
-          console.error('project rename save error', error)
+          logger.error('project', 'project rename save error', error)
           toast(t('studio.renameFailed'), 'error')
         })
     },

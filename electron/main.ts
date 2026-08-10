@@ -30,6 +30,8 @@ import { openWorkspaceFolder, selectWorkspaceFolder } from "./workspace/workspac
 import { listWorkspaceFiles, resolveWorkspaceFilePath } from "./workspace/workspaceFileIndex";
 import { registerWorkspaceFileDeleteIpc } from "./workspace/workspaceFileDelete";
 import { logCrash } from "./crashLog";
+import { initLogger, logger } from "./logger";
+import { registerLogIpc } from "./logIpc";
 import { installMainProcessLifecycle } from "./mainProcessLifecycle";
 import { registerExportJobIpc } from "./export/exportJobIpc";
 import { registerAgentChatV2Ipc } from "./ai/agentChatV2Ipc";
@@ -58,12 +60,19 @@ import { registerSettingsIpc } from "./settings/registerSettingsIpc";
 import { registerProductionRunIpc } from "./productionRun/productionRunIpc";
 import { installProductionRunDesktopLifecycle } from "./productionRun/productionRunDesktopLifecycle";
 import { EventChannels, IpcChannels } from "./shared/ipcChannels";
+import { publishTo } from "./events/eventBus";
 installMainProcessLifecycle(app);
 const configuredUserDataDir = String(process.env.NOMI_ELECTRON_USER_DATA_DIR || "").trim();
 if (configuredUserDataDir) {
   // dev-electron.mjs 按 renderer 端口隔离 profile，避免复用旧 Vite chunk/code cache。
   app.setPath("userData", configuredUserDataDir);
 }
+// 运行期日志：注入日志目录（app.getPath("logs")）让日志真正落盘；redact 依赖 catalog secrets 清单。
+initLogger({
+  logsDir: app.getPath("logs"),
+  version: app.getVersion(),
+  secrets: () => catalogSecretsProvider(),
+});
 // 单实例锁（能力核前提，docs/plan/2026-06-20）：保证同一 user-data 只有一个 app 实例 = 工程文件的
 // 唯一写者，外部 CLI/MCP 才能安全地「app 开着走 RPC、关着走 headless」。隔离实例（eval/promo 用独立
 // --user-data-dir）拿到的是各自的锁，不受影响。拿不到锁 = 已有实例在跑 → 让出（聚焦老窗后退出）。
@@ -189,25 +198,25 @@ if (lowMemoryMode || process.env.NOMI_DISABLE_V8_JIT === "1") {
 function registerDevDiagnostics(mainWindow: BrowserWindow, rendererUrl: string): void {
   if (!isDev) return;
 
-  console.log(`[nomi:desktop] loading renderer: ${rendererUrl}`);
+  logger.info("lifecycle", "loading renderer", { url: rendererUrl });
   if (configuredUserDataDir) {
-    console.log(`[nomi:desktop] userData dir: ${configuredUserDataDir}`);
+    logger.info("lifecycle", "userData dir", { dir: configuredUserDataDir });
   }
 
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
-    console.error(`[nomi:desktop] renderer load failed (${errorCode}): ${errorDescription} ${validatedURL}`);
+    logger.error("lifecycle", "renderer load failed", new Error(`${errorCode}: ${errorDescription} ${validatedURL}`));
   });
   mainWindow.webContents.on("did-finish-load", () => {
-    console.log("[nomi:desktop] renderer did finish load");
+    logger.info("lifecycle", "renderer did finish load");
   });
   mainWindow.webContents.on("dom-ready", () => {
-    console.log("[nomi:desktop] renderer dom ready");
+    logger.info("lifecycle", "renderer dom ready");
   });
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
-    console.error("[nomi:desktop] renderer process gone:", details);
+    logger.error("lifecycle", "renderer process gone", new Error(JSON.stringify(details)));
   });
   mainWindow.webContents.on("preload-error", (_event, preloadPath, error) => {
-    console.error(`[nomi:desktop] preload failed: ${preloadPath}`, error);
+    logger.error("lifecycle", "preload failed", error, { preloadPath });
   });
   mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
     const method = level >= 2 ? console.error : console.log;
@@ -269,7 +278,7 @@ async function loadRendererWithRetry(mainWindow: BrowserWindow, rendererUrl: str
       lastError = error;
       if (!isDev || mainWindow.isDestroyed() || attempt === attempts) break;
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[nomi:desktop] renderer load attempt ${attempt}/${attempts} failed: ${message}`);
+      logger.warn("lifecycle", "renderer load attempt failed", { attempt, attempts, message });
       await wait(DEV_RENDERER_LOAD_RETRY_MS);
     }
   }
@@ -306,8 +315,8 @@ async function createWindow(
   });
 
   // Windows 自绘标题栏需要知道最大化态来切「最大化/还原」图标。窗口级监听随窗口销毁回收（无泄漏）。
-  mainWindow.on("maximize", () => mainWindow.webContents.send(EventChannels.windowMaximized, true));
-  mainWindow.on("unmaximize", () => mainWindow.webContents.send(EventChannels.windowMaximized, false));
+  mainWindow.on("maximize", () => publishTo(mainWindow.webContents, EventChannels.windowMaximized, true));
+  mainWindow.on("unmaximize", () => publishTo(mainWindow.webContents, EventChannels.windowMaximized, false));
 
   // External http(s) links (e.g. the "get your API key" link → provider console)
   // open in the user's real browser, never as a new in-app Electron window.
@@ -342,7 +351,7 @@ async function createWindow(
     try {
       await mainWindow.webContents.session.clearCache();
     } catch (error) {
-      console.warn("[nomi:desktop] failed to clear dev session cache:", error);
+      logger.warn("lifecycle", "failed to clear dev session cache", { error: error instanceof Error ? error.message : String(error) });
     }
   }
   await loadRendererWithRetry(mainWindow, rendererUrl);
@@ -372,7 +381,7 @@ function recreateMainWindowFromSender(sender: WebContents, options: { preserveRo
     .then(() => createWindow({ bounds, maximize, rendererUrl }))
     .then((nextWindow) => nextWindow.focus())
     .catch((error) => {
-      console.error(`[nomi:desktop] failed to recreate window for ${options.reason}:`, error);
+      logger.error("lifecycle", "failed to recreate window", error, { reason: options.reason });
     })
     .finally(() => {
       isRecreatingMainWindow = false;
@@ -397,6 +406,8 @@ function registerSyncIpc<TArgs extends unknown[], TResult>(
 function registerIpc(): void {
   const selectedWorkspaceRoots = new Set<string>();
   registerI18nIpc();
+  // 运行期日志（诊断）：上送/级别/导出。
+  registerLogIpc();
   // 渲染层崩溃（RootErrorBoundary）也落到同一崩溃日志（P0-8）。
   ipcMain.on(IpcChannels.logRendererCrash, (_event, message: unknown) => logCrash("renderer", String(message)));
   // 窗口控制（Windows 自绘标题栏）：只注册一次，作用于发起请求的那个窗口（fromWebContents），
@@ -733,7 +744,7 @@ if (hasSingleInstanceLock)
       try {
         ensureBuiltinModelSeeds();
       } catch (error) {
-        console.error("[nomi:desktop] ensureBuiltinModelSeeds failed:", error);
+        logger.error("lifecycle", "ensureBuiltinModelSeeds failed", error);
       }
       // 存量中转模型升级到厂商原生报文（异步不挡窗口、幂等、失败静默；细节见该模块头注释）。
       void import("./catalog/relayNativeWireUpgrade").then((m) => m.scheduleRelayNativeWireUpgrade()).catch(() => {});
@@ -743,7 +754,7 @@ if (hasSingleInstanceLock)
       //  · startCapabilityCore(外部 MCP 的本地 RPC 广告)：fail-open，本就不影响 app；低内存模式默认跳过。
       if (!capabilityCoreDisabled) {
         void startDesktopCapabilityCore().catch((error) => {
-          console.error("[nomi:desktop] startCapabilityCore failed:", error);
+          logger.error("lifecycle", "startCapabilityCore failed", error);
         });
       }
       await createWindow();
@@ -753,14 +764,14 @@ if (hasSingleInstanceLock)
           // 全局截图热键：默认关，只有用户在设置里开过才会真注册（见 screenshot/screenshotHotkey.ts）。
           void import("./screenshot/screenshotHotkey")
             .then(({ applyScreenshotHotkey }) => applyScreenshotHotkey())
-            .catch((error) => console.error("[nomi:desktop] screenshot hotkey boot failed:", error));
+            .catch((error) => logger.error("lifecycle", "screenshot hotkey boot failed", error));
           void import("./proxyIpc")
             .then(({ applyProxyAtBoot }) => applyProxyAtBoot())
-            .catch((error) => console.error("[nomi:desktop] proxy boot failed:", error))
+            .catch((error) => logger.error("lifecycle", "proxy boot failed", error))
             // 代理定型后装 vendor 候选域自愈（apimart 被墙自动切官方备用域；回切探测走最终 dispatcher）。
             .then(() => import("./vendor/vendorBaseFallbackBoot"))
             .then((m) => m.configureVendorBaseFallbackAtBoot())
-            .catch((error) => console.error("[nomi:desktop] vendor base fallback boot failed:", error));
+            .catch((error) => logger.error("lifecycle", "vendor base fallback boot failed", error));
         },
         lowMemoryMode ? 15000 : 3000,
       );
@@ -768,13 +779,13 @@ if (hasSingleInstanceLock)
       app.on("activate", () => {
         if (BrowserWindow.getAllWindows().length === 0) {
           void createWindow().catch((error) => {
-            console.error("[nomi:desktop] failed to recreate window:", error);
+            logger.error("lifecycle", "failed to recreate window", error);
           }).then(() => flushPendingProductionDeepLink());
         }
       });
     })
     .catch((error) => {
-      console.error("[nomi:desktop] failed to start:", error);
+      logger.error("lifecycle", "failed to start", error);
       app.quit();
     });
 app.on("window-all-closed", () => {
@@ -789,8 +800,8 @@ app.on("before-quit", () => {
   try {
     const { abortAllActiveExports } = require("./export/exportJobs") as typeof import("./export/exportJobs");
     const aborted = abortAllActiveExports();
-    if (aborted > 0) console.log(`[nomi:desktop] aborted ${aborted} in-flight export(s) on quit`);
+    if (aborted > 0) logger.info("lifecycle", "aborted in-flight exports on quit", { aborted });
   } catch (error) {
-    console.error("[nomi:desktop] failed to abort exports on quit:", error);
+    logger.error("lifecycle", "failed to abort exports on quit", error);
   }
 });

@@ -3,6 +3,8 @@ import type { WebContents } from "electron";
 import { beginTurnTrace, traceChatEvent, traceGateDenied, traceToolDecision } from "../events/agentChatTrace";
 import { desktopT } from "../i18n";
 import { EventChannels, IpcChannels } from "../shared/ipcChannels";
+import { publishTo } from "../events/eventBus";
+import { logger } from "../logger";
 
 // ---------------------------------------------------------------------------
 // Agent chat V2 — real streaming + tool-call confirmation
@@ -48,8 +50,7 @@ function sendChatV2Event(session: AgentChatV2Session, event: unknown): void {
   // 结构化轨迹旁路(S3):先记账再投递;翻译器内部吞掉一切失败,绝不影响对话。
   traceChatEvent(session.sessionId, event);
   const target: WebContents | undefined = electronWebContents.fromId(session.webContentsId) || undefined;
-  if (!target || target.isDestroyed()) return;
-  target.send(EventChannels.agentsChatV2Event, { sessionId: session.sessionId, event });
+  publishTo(target!, EventChannels.agentsChatV2Event, { sessionId: session.sessionId, event });
 }
 
 export function registerAgentChatV2Ipc(): void {
@@ -64,6 +65,18 @@ export function registerAgentChatV2Ipc(): void {
     };
     agentChatV2Sessions.set(sessionId, session);
     beginTurnTrace(sessionId, payload);
+    // ---- B:IPC 入口确认 attachments 是否真的到主进程(DEBUG,仅带附件) ----
+    const rawAtt = (payload as Record<string, unknown>).attachments;
+    if (Array.isArray(rawAtt) && rawAtt.length > 0) {
+      logger.debug("agent", "B:chat start received", {
+        sessionId,
+        attachmentCount: rawAtt.length,
+        each: rawAtt.slice(0, 10).map((item) => {
+          const rec = (item ?? {}) as Record<string, unknown>;
+          return { urlPrefix: String(rec.url ?? "").slice(0, 60), kind: rec.kind, contentType: rec.contentType };
+        }),
+      });
+    }
 
     // 渲染层（窗口/标签）销毁 → 任何挂起确认永远不会回话。监听 destroyed，按取消收口，
     // 根治「窗口关了主进程还在 await + session 泄漏」整类（确认超时是再下一层兜底）。
@@ -90,7 +103,7 @@ export function registerAgentChatV2Ipc(): void {
               const pending = session.pendingConfirmations.get(toolCallId);
               if (!pending) return;
               session.pendingConfirmations.delete(toolCallId);
-              console.error(`[agentv2] 工具确认 ${CONFIRM_TIMEOUT_MS / 60_000} 分钟无响应，自动跳过（${toolName}）`);
+              logger.error("agent", "工具确认超时，自动跳过", new Error(`${toolName} ${CONFIRM_TIMEOUT_MS / 60_000} 分钟无响应`), { toolName });
               pending.resolve({ ok: false, message: desktopT("agent.confirmTimeout") });
             }, CONFIRM_TIMEOUT_MS);
             session.pendingConfirmations.set(toolCallId, { resolve, timeout });

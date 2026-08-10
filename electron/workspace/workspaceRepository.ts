@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { readJsonFile, writeJsonFileAtomic } from "../jsonFile";
+import { logger } from "../logger";
 import { migrateLegacyProjectFolder } from "./legacyProjectMigration";
 import { initializeWorkspace, readWorkspaceManifest, writeWorkspaceManifest } from "./workspaceManifest";
 import {
@@ -453,7 +454,7 @@ export function gcEmptyDraftWorkspaceProjects(
     if (result.deleted) recycled.push(project.id);
   }
   if (recycled.length) {
-    console.info(`[gc] recycled ${recycled.length} empty draft project(s): ${recycled.join(", ")}`);
+    logger.info("project", "recycled empty draft projects", { count: recycled.length, ids: recycled });
   }
   return { recycled, scanned: projects.length };
 }

@@ -1,5 +1,11 @@
 import { create } from 'zustand'
 import { subscribeWithSelector } from 'zustand/middleware'
+// WorkspaceMode 类型/常量已下沉到共享 config 层（通用 UI 用；零业务依赖）。
+// 为兼容 workbench 内部及既有引用方，继续从本文件 re-export。
+import { isWorkspaceMode, type WorkspaceMode } from '../config/workspaceMode'
+export type { WorkspaceMode } from '../config/workspaceMode'
+export { WORKSPACE_MODES } from '../config/workspaceMode'
+export { isWorkspaceMode } from '../config/workspaceMode'
 import {
   addClipAtFrame,
   applyClipStartFrames,
@@ -69,10 +75,6 @@ function pushTimelineUndo(stack: TimelineState[], previous: TimelineState): Time
   if (next.length > TIMELINE_UNDO_LIMIT) next.shift()
   return next
 }
-
-export const WORKSPACE_MODES = ['creation', 'generation', 'preview'] as const
-
-export type WorkspaceMode = (typeof WORKSPACE_MODES)[number]
 
 type GraphViewport = { zoom: number; offset: { x: number; y: number } }
 
@@ -238,10 +240,6 @@ type WorkbenchState = {
   updateTimelineTextClipTransform: (id: string, patch: { position?: Vec2; scale?: number }, options?: { commit?: boolean }) => void
   /** 文字 clip 换字体（id，见 textFonts.ts）。 */
   updateTimelineTextClipFont: (id: string, fontId: string) => void
-}
-
-export function isWorkspaceMode(value: unknown): value is WorkspaceMode {
-  return typeof value === 'string' && WORKSPACE_MODES.includes(value as WorkspaceMode)
 }
 
 export const useWorkbenchStore = create<WorkbenchState>()(subscribeWithSelector((set, get) => ({

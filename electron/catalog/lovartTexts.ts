@@ -7,9 +7,13 @@
 export type LovartTextModel = {
   modelKey: string;
   labelZh: string;
+  meta?: unknown;
 };
 
-/** Lovart 网关的 curated 文本模型（单源）。网关 /v1/models 里 chat 模型的 id 就是 lovart-chat。 */
+/** Lovart 网关的 curated 文本模型（单源）。网关 /v1/models 里 chat 模型的 id 就是 lovart-chat。
+ *  meta.supportsImageInput=true：Lovart 网关 /v1/chat/completions 支持多模态图输入，显式声明
+ *  否则 modelSupportsImageInput 走 VISION_MODEL_RE 正则匹配不到 lovart-chat → 返回 false →
+ *  聊天图片被 agentUserContent.ts:69 静默丢弃（"一直提示没有图片"根因）。 */
 export const LOVART_TEXT_MODELS: LovartTextModel[] = [
-  { modelKey: "lovart-chat", labelZh: "Lovart Chat" },
+  { modelKey: "lovart-chat", labelZh: "Lovart Chat", meta: { supportsImageInput: true } },
 ];

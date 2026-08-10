@@ -39,6 +39,7 @@ import { createSocksDispatcher, parseSocksProxyUrl } from "./socksDispatcher";
 // 没法在纯 Node 下单测（既有 systemProxy.test.ts 正是靠"不碰 electron 运行时"跑起来的）。
 // 故偏好由调用方（main.ts / proxyIpc.ts，它们本来就在 electron 里）读好了注入。
 import type { ProxyMode, ProxyPrefs } from "./proxySettings";
+import { logger } from "./logger";
 
 /** 没有偏好文件时的行为 = 上线本设置前的唯一行为（跟随系统探测）。 */
 const FOLLOW_SYSTEM: ProxyPrefs = { mode: "system", customUrl: "" };
@@ -66,8 +67,6 @@ export type ProxyStatus = {
   unsupported: string;
   source: ProxySource | "";
 };
-
-const LOG = "[nomi:proxy]";
 
 /**
  * 原始直连 dispatcher，**只捕获一次**。
@@ -208,7 +207,7 @@ export async function resolveProxy(session: Session, prefs: ProxyPrefs = FOLLOW_
     const raw = await session.resolveProxy("https://api.openai.com");
     return parseResolveProxyString(raw);
   } catch (error) {
-    console.error(`${LOG} session.resolveProxy 失败:`, error);
+    logger.error("proxy", "session.resolveProxy 失败", error instanceof Error ? error : new Error(String(error)));
     return { kind: "none" };
   }
 }
@@ -298,7 +297,7 @@ export async function applySystemProxy(session: Session, prefs?: ProxyPrefs): Pr
       const socks = resolution.kind === "socks" ? parseSocksProxyUrl(resolution.url) : null;
       const proxy = socks ? createSocksDispatcher(socks) : new ProxyAgent(resolution.url);
       setGlobalDispatcher(new SelectiveProxyDispatcher(proxy, direct));
-      console.log(`${LOG} 已启用代理 ${activeProxyLabel}；本地/私网地址直连`);
+      logger.info("proxy", "已启用代理；本地/私网地址直连", { activeProxyLabel });
       // 渲染层同源修复：主进程 undici 走代理后，渲染层的 Chromium 网络栈（<video>/<img>/
       // renderer fetch）默认只读「系统设置」代理、**不读环境变量**。env 来源的代理（Clash/终端
       // export HTTPS_PROXY 的典型场景）会出现「主进程能下载、渲染层放不出远端视频」的撕裂——
@@ -312,7 +311,7 @@ export async function applySystemProxy(session: Session, prefs?: ProxyPrefs): Pr
           //（Ollama 11434 / ComfyUI 8188）也代理掉，与 SelectiveProxyDispatcher 的 isPrivateHost 同义。
           proxyBypassRules: LOCAL_BYPASS_RULES,
         });
-        console.log(`${LOG} 已把代理同步到渲染层 session（远端视频/图片预览同源走代理）`);
+        logger.info("proxy", "已把代理同步到渲染层 session（远端视频/图片预览同源走代理）");
       }
     } else {
       // 直连档（none / unsupported）**必须把 dispatcher 还原**——热切换才成立：
@@ -327,14 +326,14 @@ export async function applySystemProxy(session: Session, prefs?: ProxyPrefs): Pr
       if (resolution.kind === "unsupported") {
         // 按直连跑，但记下 unsupported 详情 → describeNetworkError 与设置面板都会如实说
         //「地址无效/协议不认识，已按直连」，绝不误说「未启用代理」（用户其实配了）。
-        console.warn(`${LOG} 探测到${resolution.detail}，用不了；当前按直连处理。`);
+        logger.warn("proxy", "探测到的代理配置用不了；当前按直连处理", { detail: resolution.detail });
       } else {
-        console.log(`${LOG} 按直连处理`);
+        logger.info("proxy", "按直连处理");
       }
     }
     return resolution;
   } catch (error) {
-    console.error(`${LOG} applySystemProxy 失败（已忽略，退回直连）:`, error);
+    logger.error("proxy", "applySystemProxy 失败（已忽略，退回直连）", error instanceof Error ? error : new Error(String(error)));
     return { kind: "none" };
   }
 }

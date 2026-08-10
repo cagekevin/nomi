@@ -13,6 +13,7 @@ import { DesignModal, confirmDialog } from '../../design'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { getTextBrain } from '../../workbench/api/promptLibraryApi'
 import { runWorkbenchTextTaskStream } from '../../workbench/api/taskApi'
+import { testRunCustomCall, upsertCustomCallModel } from '../../workbench/api/modelCatalogApi'
 import { stripCodeFences } from './customCallIntent'
 
 export type CustomCallTarget = {
@@ -136,10 +137,10 @@ export function CustomCallEditor({
   )
 
   const runTest = React.useCallback(async () => {
-    if (!target || !bridge?.modelCatalog.customCallTestRun || test.phase === 'running') return
+    if (!target || test.phase === 'running') return
     setTest({ phase: 'running' })
     try {
-      const result = await bridge.modelCatalog.customCallTestRun({
+      const result = await testRunCustomCall({
         vendorKey: target.vendorKey,
         modelKey: target.modelKey,
         script,
@@ -155,17 +156,16 @@ export function CustomCallEditor({
         durationMs: 0,
       })
     }
-  }, [target, bridge, script, test.phase])
+  }, [target, script, test.phase])
 
   const save = React.useCallback(() => {
-    if (!target || !bridge) return
+    if (!target) return
     setSaveError('')
     try {
-      const trimmed = script.trim()
-      bridge.modelCatalog.upsertModel({
+      upsertCustomCallModel({
         vendorKey: target.vendorKey,
         modelKey: target.modelKey,
-        customCall: trimmed ? { script: trimmed } : null,
+        script,
       })
       onSaved()
       onClose()
@@ -174,10 +174,10 @@ export function CustomCallEditor({
         t('onboardingProviders.customCall.saveFailed', { message: e instanceof Error ? e.message : String(e) }),
       )
     }
-  }, [target, bridge, script, onSaved, onClose, t])
+  }, [target, script, onSaved, onClose, t])
 
   const removeScript = React.useCallback(async () => {
-    if (!target || !bridge) return
+    if (!target) return
     const ok = await confirmDialog({
       title: t('onboardingProviders.customCall.removeConfirmTitle'),
       message: t('onboardingProviders.customCall.removeConfirmMessage', { name: target.label }),
@@ -186,7 +186,7 @@ export function CustomCallEditor({
     })
     if (!ok) return
     try {
-      bridge.modelCatalog.upsertModel({ vendorKey: target.vendorKey, modelKey: target.modelKey, customCall: null })
+      upsertCustomCallModel({ vendorKey: target.vendorKey, modelKey: target.modelKey, script: '' })
       onSaved()
       onClose()
     } catch (e) {
@@ -194,7 +194,7 @@ export function CustomCallEditor({
         t('onboardingProviders.customCall.saveFailed', { message: e instanceof Error ? e.message : String(e) }),
       )
     }
-  }, [target, bridge, onSaved, onClose, t])
+  }, [target, onSaved, onClose, t])
 
   const insertTemplate = React.useCallback(
     (id: string) => {

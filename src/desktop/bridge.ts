@@ -288,6 +288,14 @@ export type DesktopUpdateEvent =
 
 export type DesktopBridge = DesktopMediaBridge & {
   platform: string
+  /** 运行期日志上送（fire-and-forget，主进程唯一写者）。老 preload / 测试环境无此口 → 渲染门面退化为 console。 */
+  log?: (level: string, scope: string, msg: string, meta?: Record<string, unknown>) => void
+  diagnostics?: {
+    getLevel: () => Promise<string>
+    setLevel: (level: string) => Promise<string>
+    get: () => Promise<{ logLevel: string; crash: string; run: string; meta: string }>
+    export: () => Promise<{ meta: string; crash: string; run: string }>
+  }
   i18n?: {
     setLocale: (locale: 'zh-CN' | 'en') => void
     /** OS 原生 locale（如 'en-US' / 'zh-CN'）；仅真 Electron 有，jsdom/测试无 → 首启回落默认语言。老 preload 可能无此口。 */

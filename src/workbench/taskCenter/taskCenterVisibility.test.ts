@@ -15,11 +15,17 @@ describe('任务面板入口常驻契约', () => {
     expect(buttonSource).toMatch(/export function TaskCenterButton[\s\S]*?: JSX\.Element\s*\{/)
     expect(buttonSource).not.toMatch(/return null/)
 
+    // NomiAppBar 已与业务解耦：任务按钮由组合层（WorkbenchShell）无条件注入到 taskCenterButton 插槽，
+    // 不再住在 app-shell 内部。这里守住「插槽存在」和「组合层注入不被 :has 隐藏」两条结构。
     const appBarSource = read('../../ui/app-shell/NomiAppBar.tsx')
     const taskGroupStart = appBarSource.indexOf('nomi-appbar__group--tasks')
-    const taskButtonStart = appBarSource.indexOf('<TaskCenterButton', taskGroupStart)
+    const slotStart = appBarSource.indexOf('{taskCenterButton}', taskGroupStart)
     expect(taskGroupStart).toBeGreaterThan(-1)
-    expect(taskButtonStart).toBeGreaterThan(taskGroupStart)
-    expect(appBarSource.slice(taskGroupStart, taskButtonStart)).not.toContain('not(:has(button))')
+    expect(slotStart).toBeGreaterThan(taskGroupStart)
+    expect(appBarSource.slice(taskGroupStart, slotStart)).not.toContain('not(:has(button))')
+
+    const shellSource = read('../WorkbenchShell.tsx')
+    expect(shellSource).toMatch(/taskCenterButton=\{/)
+    expect(shellSource).toMatch(/<TaskCenterButton/)
   })
 })

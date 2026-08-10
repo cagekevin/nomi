@@ -1,5 +1,6 @@
 import React from 'react'
 import i18n from '../i18n'
+import { logger } from '../utils/logger'
 
 type Props = { children: React.ReactNode }
 type State = { error: Error | null; info: string }
@@ -40,7 +41,7 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     } catch {
       /* ignore */
     }
-    console.error('[nomi] renderer crashed:', error, detail)
+    logger.error('lifecycle', 'renderer crashed', error, { componentStack: detail })
   }
 
   private handleCopy = (): void => {

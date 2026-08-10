@@ -13,11 +13,13 @@
 // 所以注册结果必须回给 UI，让用户知道「这组键没抢到，换一个」。
 import { app, desktopCapturer, globalShortcut, screen, shell, systemPreferences } from "electron";
 import path from "node:path";
+import { logger } from "../logger";
 import { getSettingsRoot, ensureDir, readJson } from "../runtimePaths";
 import { writeJsonFileAtomic } from "../jsonFile";
 import { getMainWindow } from "../mainWindowRegistry";
 import { writeAsset } from "../runtime";
 import { EventChannels } from "../shared/ipcChannels";
+import { publishTo } from "../events/eventBus";
 
 const PREFS_FILE = "screenshot-hotkey-prefs.json";
 
@@ -100,7 +102,7 @@ export function applyScreenshotHotkey(prefs?: ScreenshotHotkeyPrefs): Screenshot
     try {
       registered = globalShortcut.register(config.accelerator, () => {
         void captureScreenToCanvas().catch((error) => {
-          console.error("[nomi:screenshot] capture failed:", error);
+          logger.error("asset", "screenshot capture failed", error instanceof Error ? error : new Error(String(error)));
         });
       });
     } catch {
@@ -169,7 +171,7 @@ export async function captureScreenToCanvas(): Promise<void> {
   const access = screenAccessStatus();
   if (access !== "granted") {
     // 未授权：给人话 + 指路，绝不静默什么都不发生。
-    win.webContents.send(EventChannels.screenshotDenied, { screenAccess: access });
+    publishTo(win.webContents, EventChannels.screenshotDenied, { screenAccess: access });
     win.show();
     win.focus();
     return;
@@ -188,14 +190,14 @@ export async function captureScreenToCanvas(): Promise<void> {
   const source =
     sources.find((candidate) => String(candidate.display_id) === String(display.id)) ?? sources[0];
   if (!source || source.thumbnail.isEmpty()) {
-    win.webContents.send(EventChannels.screenshotFailed, { reason: "empty" });
+    publishTo(win.webContents, EventChannels.screenshotFailed, { reason: "empty" });
     return;
   }
 
   const size = source.thumbnail.getSize();
   const projectId = currentProjectIdForCapture();
   if (!projectId) {
-    win.webContents.send(EventChannels.screenshotFailed, { reason: "no-project" });
+    publishTo(win.webContents, EventChannels.screenshotFailed, { reason: "no-project" });
     win.show();
     win.focus();
     return;
@@ -210,13 +212,13 @@ export async function captureScreenToCanvas(): Promise<void> {
   ) as { data?: { url?: string } };
   const url = record?.data?.url;
   if (!url) {
-    win.webContents.send(EventChannels.screenshotFailed, { reason: "write" });
+    publishTo(win.webContents, EventChannels.screenshotFailed, { reason: "write" });
     return;
   }
 
   win.show();
   win.focus();
-  win.webContents.send(EventChannels.screenshotCaptured, { url, width: size.width, height: size.height });
+  publishTo(win.webContents, EventChannels.screenshotCaptured, { url, width: size.width, height: size.height });
 }
 
 /** 抓屏时用哪个项目落素材——由渲染层在项目切换时报上来（主进程不自己猜当前项目）。 */

@@ -1,3 +1,5 @@
+import { logger } from './logger'
+
 type StartupMark = {
   label: string
   time: number
@@ -18,7 +20,7 @@ export function markStartup(label: string): void {
   const delta = previous ? time - previous.time : time - startedAt
   const total = time - startedAt
   if (delta >= SLOW_STEP_MS || total >= SLOW_STEP_MS) {
-    console.info(`[nomi:start] ${label} +${delta.toFixed(1)}ms total=${total.toFixed(1)}ms`)
+    logger.debug('lifecycle', 'startup step', { label, deltaMs: Math.round(delta), totalMs: Math.round(total) })
   }
 }
 
@@ -29,7 +31,7 @@ export function timeStartupStep<T>(label: string, work: () => T, warnMs = SLOW_S
   } finally {
     const duration = now() - start
     if (duration >= warnMs) {
-      console.info(`[nomi:start] ${label} took ${duration.toFixed(1)}ms`)
+      logger.debug('lifecycle', 'startup step took', { label, ms: Math.round(duration) })
     }
   }
 }
@@ -41,7 +43,7 @@ export async function timeStartupStepAsync<T>(label: string, work: () => Promise
   } finally {
     const duration = now() - start
     if (duration >= warnMs) {
-      console.info(`[nomi:start] ${label} took ${duration.toFixed(1)}ms`)
+      logger.debug('lifecycle', 'startup step took', { label, ms: Math.round(duration) })
     }
   }
 }

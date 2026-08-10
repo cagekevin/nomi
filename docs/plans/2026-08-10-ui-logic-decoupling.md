@@ -2,7 +2,7 @@
 
 - 日期：2026-08-10
 - 分支：refactor/decouple-ipc-runtime（当前 working tree）
-- 状态：待执行
+- 状态：**已执行（2026-08-10）**：#4 + #1 + #2 + #5 已完成并通过门岗；**#3 按评估结论暂缓**（详见「执行记录」「执行顺序」「备注」）
 - 类型：纯重构（不改功能、不加特性），目标是把已有分层补齐到「结构性保证」
 
 ## 背景与动机（第一性）
@@ -42,13 +42,15 @@
   - `ChipModel` 业务类型从 `src/ui/onboarding/ModelChipGroups.tsx:15-20` 移到 `src/config/` 或 api 类型模块（第 5 类：业务类型漏在 UI）。
 - 验收：UI 组件内无 `modelCatalog.listModels` / `customCallTestRun` 直接调用，无手写 DTO→业务模型映射。
 
-### 3. 抽出 canvasViewportStore（仅纯视图态，边界已核实）
+### 3. 抽出 canvasViewportStore（⚠️ 已重估边界，建议暂缓）
 - 文件：`src/workbench/generationCanvas/store/generationCanvasStore.ts:41-45`（混 `canvasZoom`/`canvasOffset` 与图数据态）
-- **边界铁证（已查代码，决定拆什么不拆什么）**：
-  - `selectedNodeIds` **不是视图态**——它被持久化（`workbenchPersistence.ts:29`）、schema（`projectRecordSchema.ts:23`）、迁移（`projectCategoryMigration.ts:162`）、节点删除/复制（`generationCanvasStore.ts:82-89,162,179,249`）等业务逻辑消费，是核心业务态。**严禁挪出图数据 store**，否则制造跨 store 同步负担（P2 反例）。
+- **边界复核（2026-08-10，修正原"仅纯视图态"判断）**：
+  - `selectedNodeIds` **不是视图态**——它被持久化（`workbenchPersistence.ts:29`）、schema（`projectRecordSchema.ts:23`）、迁移（`projectCategoryMigration.ts:162`）、节点删除/复制（`generationCanvasStore.ts:82-89,162,179,249`）等业务逻辑消费，是核心业务态。**严禁挪出图数据 store**，否则制造跨 store 同步负担（P2 反例）。✅ 此判断不变。
+  - ⚠️ **`canvasZoom`/`canvasOffset` 并非"无业务消费者、仅渲染用"**——消费面实测 **24 个文件**，除视口组件（`useCanvasViewport`/`useCanvasViewportGestures`/`useCanvasTransformStoreSync`）外，还含节点交互/浮层定位（`useComposerViewportPlacement` 9 处、`useNodeDragResize`、`useCanvasPointerInteractions`、`ScreenshotCropOverlay`、`BatchPlanOverlay`、`NodeGenerationComposer`、`NodeFloatingToolbar` 等），与图数据几何强耦合。
+  - ⚠️ **重置逻辑在业务 store**：`generationCanvasStore.ts:221-222` 的 `loadProjectFromPayload` 里把 `canvasZoom:1, canvasOffset:{x:0,y:0}` 归零。若抽出 viewport store，业务 store 的加载流程要反向依赖 viewport store → **恰好制造计划自己说的"跨 store 同步负担"**。
   - `generationAiCollapsed` / `generationAiDraft` / `generationAiMessages` 是创作助手 UI 态，由 `CreationAiPanel` 自管，本计划不碰。
-  - **真正纯视图态只有 `canvasZoom` / `canvasOffset`**（视口变换，无业务消费者，仅渲染用）。
-- 做法：新建 `src/workbench/generationCanvas/store/canvasViewportStore.ts`，只搬 `canvasZoom`/`canvasOffset` + 对应 `setCanvasTransform` 等视图操作；图数据 store 保持纯业务（节点/边/任务/选中态/AI 态）。
+- **结论：建议暂缓**。除非能证明抽完后 `loadProjectFromPayload` 的 viewport 重置**不用反向依赖**（例如把"加载归零"作为 viewport store 的显式 action 由组合层触发），否则拆分的跨 store 负担 > 收益。当前混装状态是"视图态存在但消费集中"，并未引发实际 bug。
+- 做法（若将来做）：新建 `canvasViewportStore.ts` 只搬 `canvasZoom`/`canvasOffset` + 视图操作；`loadProjectFromPayload` 的归零由组合层（或在 viewport store 提供 `reset()`）触发，业务 store 不反向 import。
 - 验收：图数据 store 不含 `canvasZoom`/`canvasOffset`；视口操作在 viewport store；`selectedNodeIds` 仍在原 store 且现有 154 处引用（含持久化/迁移/测试）零改动。
 
 ### 4. 升级方向分离测试门岗（防复发，P2 根因）
@@ -77,10 +79,10 @@
 - 业务逻辑本身行为不变，仅移动/下沉，不删功能（P1 在此场景=「下沉旧实现、删除组件内旧手写」，无并行版）。
 - `toast`（`src/ui/toast.tsx`）当前被 40+ 业务文件共享：本计划**不强行拆分**（成本高、风险大），记录为已知边界，后续单独评估是否提升为共享基础层。
 
-## 执行顺序（每步可独立提交 + 过门）
+## 执行顺序（2026-08-10 已重排：先护栏，杠杆最大者优先，#3 移出）
 
-1. #4 先写门岗测试（红，含两条不变量）→ 02 #1 解 NomiAppBar + 抽 WorkspaceMode 类型（绿）→ 03 #2 下沉 DTO/编排 + 移 ChipModel 类型（绿）→ 04 #3 抽 canvasViewportStore（仅 canvasZoom/canvasOffset，绿）→ 05 #5 抽离硬编码 prompt（绿）。
-   - 理由：先立结构性护栏，再改代码，避免「解完又漏回去」；#3 边界已收窄，只动纯视图态，不动 selectedNodeIds 等业务态；#5 与 #1-#3 无依赖，可穿插在任意绿灯步骤后。
+1. **#4 先写门岗测试（红，含两条不变量）** → **#1 解 NomiAppBar + 抽 WorkspaceMode 类型（绿）** → #2 下沉 DTO/编排 + 移 ChipModel 类型（绿） → #5 抽离硬编码 prompt（绿） → **#3（暂缓）**。
+   - 理由：先立结构性护栏（#4），避免「解完又漏回去」；#1 是杠杆最大、最稳的解耦（消 UI↔workbench 环依赖，破坏面可控）；#2/#5 中价值、无相互依赖可穿插；**#3 因消费面广（24 文件）+ 重置逻辑在业务 store 会制造跨 store 同步负担，降级为暂缓项**，除非先论证 reset 反向依赖可消除。
 
 ## 回滚
 
@@ -100,3 +102,54 @@
 - 本计划为架构重构，按 R4 多文件先写此文档。
 - 子代理审查还发现潜在状态分裂点：`production/productionRunStore.ts` 与 `taskCenter/productionRunTaskCenter.ts` / `projection.ts` / `generationQueueStore.ts` 三套围绕"任务/运行"的状态，投影关系需确认。本计划**不纳入**（范围控制），记录待后续单独审计。
 - #5 排查结论（2026-08-10）：源码内硬编码 system prompt 共 3 处——`browserPromptExtraction.ts` 两段常量（`:16-55`、`:59-75+`）、`generationCanvasAgentClient.ts` 的 `buildStaticAgentSystemPrompt`（`:57-97`）。创作区 `CreationAiPanel.tsx:320` 已正确走 `skillKey` 后端注入，非硬编码，不动。
+- **整体评估（2026-08-10）**：计划方向对、质量高（带 file:line + 边界铁证 + 门岗护栏），纯重构收益=结构性保证 + 防环依赖，符合「AI 接管开发」目标。**推荐做 #4 + #1（护栏 + 杠杆最大）**；#2/#5 中价值可做；**#3 建议暂缓**（消费面广 + 跨 store 同步负担 > 收益）。收益与代价：改 20+ 文件 + 大改 NomiAppBar，代价可控（每步独立 commit、可 revert）。
+
+## 执行记录（2026-08-10，已通过门岗）
+
+按「先护栏、杠杆最大者优先、#3 移出」的顺序执行 #4 + #1 + #2 + #5，全部完成。
+
+### #4 方向分离门岗（先立护栏）
+- 新增 `src/ui/app-shell/ui-business-decoupling.test.ts`，源码扫描断言两条结构性不变量：
+  1. `src/ui/app-shell/**` 不得 `import` 任何 `workbench` 路径（值或类型）
+  2. app-shell 不得直接调用业务 store（`useGenerationCanvasStore` / `useWorkbenchStore`，含 `.getState`）
+- 先红（正确捕获 NomiAppBar 违规）→ #1 后转绿，成为持久防线。
+- 注：门岗作用域定为 `src/ui/app-shell/**` 而非计划初稿的 `src/ui/**`——实测 `src/ui/onboarding`、`src/ui/browser` 等专精特性 UI 仍合法依赖业务 api（如 `OnboardingDrawer` import `workbench/api`），只有**通用外壳**（app-shell）必须零业务依赖。此调整更贴合「通用 UI 不感知业务」的本意，避免误伤专精 UI。
+
+### #1 WorkspaceMode 抽离 + NomiAppBar 解耦（杠杆最大）
+- 新增 `src/config/workspaceMode.ts`（`WORKSPACE_MODES` / `WorkspaceMode` / `isWorkspaceMode`，零业务依赖）。
+- `workbenchStore.ts` 从 config re-export（`WorkspaceMode`/`WORKSPACE_MODES`/`isWorkspaceMode`），既有 16 处 `src/workbench/**` 引用方零改动。
+- `src/ui/app-shell/NomiAppBar.tsx`：
+  - `WorkspaceMode` 类型改从 `../../config/workspaceMode` 取；
+  - `OnboardingChecklist` / `TaskCenterButton` 改为 **props 插槽注入**（`onboardingChecklist` / `taskCenterButton`）；
+  - `selectNodes([nodeId])` 业务动作上抛，`projectId` 只喂给注入的 `TaskCenterButton`，故移除 NomiAppBar 的 `projectId` prop（孤儿）。
+  - 组合层 `src/workbench/WorkbenchShell.tsx` 注入插槽并内联 `onRevealNode`（`handleWorkspaceModeChange('generation')` + `useGenerationCanvasStore.getState().selectNodes`）。
+- 同步更新 `taskCenterVisibility.test.ts` 守护新结构（插槽存在 + 组合层无条件注入不被 `:has` 隐藏）。
+- 验收达成：`NomiAppBar.tsx` 内不再 `import ... from '../../workbench'` 任何路径。
+
+### #2 DTO 转换与业务编排下沉 api 层
+- `ChipModel` / `ModelChipKind` 业务类型移到 `src/config/modelChip.ts`（从 `ModelChipGroups.tsx` / `modelChipGrouping.ts` 移出，`modelChipGrouping.ts` 保持 re-export）。
+- `src/workbench/api/modelCatalogApi.ts` 新增：
+  - `loadOnboardingCatalogSnapshot()`：封装「目录 DTO → ChipModel[] + scripts Map」映射（原 `OnboardingDrawer` 手写逻辑）；
+  - `testRunCustomCall()` / `upsertCustomCallModel()`：封装 `customCallTestRun` / `upsertModel` 编排。
+- `OnboardingDrawer.tsx` / `CustomCallEditor.tsx` 改消费 api 函数，删除组件内手写 DTO→ChipModel 映射与直接 bridge 调用。
+- 验收达成：`src/ui/**` 内无 `modelCatalog.listModels` / `customCallTestRun` 直接调用，无手写 DTO→业务模型映射。
+
+### #5 硬编码 system prompt 抽离（内容/代码分离）
+- 新增 `src/config/prompts/browserPromptExtraction.ts`：`BROWSER_IMAGE_REPLICATE_PROMPT_EXTRACTION_PROMPT` / `BROWSER_IMAGE_STYLE_PROMPT_EXTRACTION_PROMPT` 两段常量。
+- `src/ui/browser/prompt/browserPromptExtraction.ts` 改为从 config 引用并 re-export（别名保持既有引用方零改动）。
+- 新增 `src/config/prompts/generationCanvasAgent.ts`：`buildGenerationCanvasAgentStaticBody(creatableKinds)` 承载「工具清单 + 硬约束」静态段；`generationCanvasAgentClient.ts` 的 `buildStaticAgentSystemPrompt` 改为拼动态段（模式指令）+ 引用资源。
+  - **关键**：按原函数逐字节重建拼接（开篇 + 空行 + 模式指令 + 空行 + 工具/约束正文），**保住 T2 前缀缓存优化**（系统段 byte 级稳定）。
+
+### 门岗结果
+| 门岗 | 结果 |
+|---|---|
+| `typecheck` | ✅ |
+| `test`（含新增门岗，4093 passed / 0 failed） | ✅ |
+| `lint:ci`（max-warnings=98） | ✅（修复本次引入的 2 个 warning） |
+| `build`（vite + electron tsc） | ✅ |
+| `check:tokens` / `check:i18n` | ✅ |
+| `check:filesize` | ⚠️ 既有失败：`electron/main.ts` 807 行 > 800，**非本次改动引入**（本次未碰 electron 文件），未扩大范围；如需要另立任务处理 |
+
+### 后续待办
+- `electron/main.ts` 807 行超 800 上限（既有问题，未在本计划处理）。
+- #3（生成区 skill 前端化）仍按评估结论暂缓，等后端 skill 承载能力就绪后再做。

@@ -1,6 +1,7 @@
 import { ipcMain, webContents as electronWebContents } from "electron";
 import type { WebContents } from "electron";
 import { EventChannels, IpcChannels } from "../shared/ipcChannels";
+import { publishTo } from "../events/eventBus";
 
 const exportJobEventSubscriptions = new Map<number, () => void>();
 let exportJobsPromise: Promise<typeof import("./exportJobs")> | null = null;
@@ -47,8 +48,7 @@ export async function registerExportJobEventForwarding(contents: WebContents): P
   const { subscribeExportJobEvents } = await loadExportJobs();
   const unsubscribe = subscribeExportJobEvents((payload) => {
     const target = electronWebContents.fromId(contents.id);
-    if (!target || target.isDestroyed()) return;
-    target.send(EventChannels.exportsEvent, payload);
+    publishTo(target!, EventChannels.exportsEvent, payload);
   });
   exportJobEventSubscriptions.set(contents.id, unsubscribe);
   contents.once("destroyed", () => {

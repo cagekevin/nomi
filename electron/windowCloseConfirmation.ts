@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from "electron";
 import { randomUUID } from "node:crypto";
 import { EventChannels, IpcChannels } from "./shared/ipcChannels";
+import { publishTo } from "./events/eventBus";
 
 const windowsAllowedToClose = new WeakSet<BrowserWindow>();
 const pendingCloseRequests = new WeakMap<BrowserWindow, string>();
@@ -43,7 +44,7 @@ export function installWindowCloseConfirmation(mainWindow: BrowserWindow): void 
     const requestId = randomUUID();
     pendingCloseRequests.set(mainWindow, requestId);
     mainWindow.focus();
-    mainWindow.webContents.send(EventChannels.windowCloseRequest, { requestId });
+    publishTo(mainWindow.webContents, EventChannels.windowCloseRequest, { requestId });
   });
   mainWindow.on("closed", () => {
     pendingCloseRequests.delete(mainWindow);

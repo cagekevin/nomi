@@ -20,7 +20,7 @@ import { OnboardingWizard } from './OnboardingWizard'
 import { FoldableModelCard } from './FoldableModelCard'
 import { VendorOnboardCard } from './VendorOnboardCard'
 import { AvailableGroup } from './AvailableGroup'
-import { type ChipModel } from './ModelChipGroups'
+import type { ChipModel } from '../../config/modelChip'
 import { ModelEnableEditor } from './ModelEnableEditor'
 import { CustomVendorManage } from './CustomVendorManage'
 import { CustomCallEditor, type CustomCallTarget } from './CustomCallEditor'
@@ -39,6 +39,7 @@ import { KNOWN_VENDORS, isKnownVendor } from '../../config/knownVendors'
 import { getDesktopBridge } from '../../desktop/bridge'
 import { notifyModelOptionsRefresh } from '../../config/useModelOptions'
 import { alertDialog, confirmDialog } from '../../design'
+import { loadOnboardingCatalogSnapshot } from '../../workbench/api/modelCatalogApi'
 
 type VendorMeta = {
   name: string
@@ -100,7 +101,6 @@ export function OnboardingDrawer(): JSX.Element {
     setBridgeMissing(false)
     // 生成模型目录（同步）。
     try {
-      const ms = bridge.modelCatalog.listModels() as Array<Record<string, unknown>>
       const vs = bridge.modelCatalog.listVendors() as Array<Record<string, unknown>>
       const maps = bridge.modelCatalog.listMappings({ vendorKey: COMFYUI_VENDOR_KEY }) as Array<Record<string, unknown>>
       // 注意：这里**不再**把 codex-local 的 enabled 掰成 MCP 接入状态。两者方向相反——
@@ -117,22 +117,8 @@ export function OnboardingDrawer(): JSX.Element {
           authType: String(v.authType || ''),
         })
       }
-      const rows: ChipModel[] = ms.map((m) => ({
-        modelKey: String(m.modelKey),
-        vendorKey: String(m.vendorKey),
-        labelZh: String(m.labelZh || m.modelKey),
-        kind: m.kind as ChipModel['kind'],
-        // enabled 缺省视为 true（老快照/DTO 未带时不误停用）。
-        enabled: m.enabled !== false,
-        meta: m.meta,
-        hasCustomCall: Boolean((m.customCall as { script?: unknown } | undefined)?.script),
-      }))
-      // 自定义调用脚本正文（编辑器回填用）；行上只带 hasCustomCall 布尔，正文单独成表不肥 ChipModel。
-      const scripts = new Map<string, string>()
-      for (const m of ms) {
-        const script = (m.customCall as { script?: unknown } | undefined)?.script
-        if (typeof script === 'string' && script.trim()) scripts.set(`${String(m.vendorKey)}/${String(m.modelKey)}`, script)
-      }
+      // DTO → ChipModel 映射下沉到 api 层（loadOnboardingCatalogSnapshot），UI 只消费结果。
+      const { models: rows, scripts } = loadOnboardingCatalogSnapshot()
       setCustomCallScripts(scripts)
       setVendorMeta(metaMap)
       setModels(rows)

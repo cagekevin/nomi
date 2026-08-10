@@ -5,6 +5,7 @@
 // 不可用时（如无 keyring 的 rootless Linux）回退明文，并给记录打 enc 标记，
 // 供下次读取时懒升级（见 runtime.ts readCatalog）。
 import { safeStorage } from "electron";
+import { logger } from "../logger";
 
 export type ApiKeyRecord = {
   vendorKey: string;
@@ -27,7 +28,7 @@ export function isSafeStorageAvailable(): boolean {
     __safeStorageAvailableCached = false;
   }
   if (!__safeStorageAvailableCached) {
-    console.warn("[catalog] safeStorage unavailable; API keys will be stored as plaintext");
+    logger.warn("catalog", "safeStorage unavailable; API keys will be stored as plaintext");
   }
   return __safeStorageAvailableCached;
 }
@@ -48,7 +49,7 @@ export function decryptApiKeyRecord(rec: ApiKeyRecord | undefined): string {
     try {
       return safeStorage.decryptString(Buffer.from(rec.apiKey, "base64"));
     } catch (e) {
-      console.error(`[catalog] failed to decrypt API key for vendor ${rec.vendorKey}: ${e instanceof Error ? e.message : e}`);
+      logger.error("catalog", "failed to decrypt API key", e instanceof Error ? e : new Error(String(e)), { vendorKey: rec.vendorKey });
       return "";
     }
   }

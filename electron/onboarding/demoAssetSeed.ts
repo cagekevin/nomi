@@ -10,6 +10,7 @@
 import { app } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { logger } from "../logger";
 
 import { listProjectAssets, writeAsset } from "../assets/projectAssetStore";
 import type { JsonRecord } from "../jsonUtils";
@@ -100,7 +101,7 @@ export function seedOnboardingDemoAssets(payload: unknown): Record<string, strin
       urls[clientId] = url;
       byFileName.set(fileName, url);
     } catch (error) {
-      console.error(`[nomi:onboarding] demo asset seed failed (${fileName}):`, error);
+      logger.error("asset", "demo asset seed failed", error instanceof Error ? error : new Error(String(error)), { fileName });
     }
   }
 

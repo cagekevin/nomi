@@ -39,6 +39,7 @@ import type { Model, Vendor } from "../catalog/types";
 import { readNomiLocalAsset } from "../assets/localAssetFile";
 import { extractTextFromLocalAsset } from "../files/extractText";
 import { buildAgentUserContent, modelSupportsImageInput, modelSupportsPdfInput, type AgentUserAttachment } from "./agentUserContent";
+import { logger } from "../logger";
 
 function readRequestedSkill(payload: JsonRecord): { key: string; name: string } {
   const chatContext = payload.chatContext;
@@ -477,6 +478,27 @@ export async function runAgentChatV2(
     (item) => item.kind === "image" || item.contentType.toLowerCase().includes("pdf") || item.fileName.toLowerCase().endsWith(".pdf"),
   );
   const { vendor, model, apiKey } = chooseTextModel(trim(payload.agentModelKey), wantsRichInput);
+
+  // ---- 带图链路诊断埋点(DEBUG 级,仅带附件才打;NOMI_LOG_LEVEL=DEBUG 时落盘 nomi.log) ----
+  const diagId = `turn-${String(trim(payload.sessionKey) || "unknown").slice(0, 12)}-${Date.now().toString(36)}`;
+  if (attachments.length > 0) {
+    logger.debug("agent", "C:chat attachments at main", {
+      traceId: diagId,
+      count: attachments.length,
+      each: attachments.map((a) => ({ urlPrefix: a.url.slice(0, 60), kind: a.kind, contentType: a.contentType })),
+      wantsRichInput,
+    });
+    logger.debug("agent", "D:model selected for rich input", {
+      traceId: diagId,
+      agentModelKey: trim(payload.agentModelKey),
+      chosenModelKey: model.modelKey,
+      chosenModelAlias: model.modelAlias,
+      vendor: vendor.providerKind,
+      supportsImageInput: modelSupportsImageInput(model.modelKey, model.modelAlias, model.meta),
+      supportsPdfInput: modelSupportsPdfInput(model.modelKey, model.modelAlias, model.meta),
+      meta: model.meta,
+    });
+  }
   const systemPrompt = trim(payload.systemPrompt as unknown as JsonRecord["systemPrompt"]);
   const skillSystemPrompt = buildSkillSystemPrompt(payload as unknown as JsonRecord);
   // 收口 sanitize（P0-6）：送进 LLM 的 user/system 文本 ASCII 可移植化（防 Moonshot 等 tokenizer 异常）。
@@ -527,10 +549,37 @@ export async function runAgentChatV2(
     supportsPdfInput: modelSupportsPdfInput(model.modelKey, model.modelAlias, model.meta),
     resolveBytes: (url) => {
       const asset = readNomiLocalAsset(url);
+      // ---- E:每张图本地读字节结果(DEBUG,仅带附件) ----
+      if (attachments.length > 0) {
+        logger.debug("agent", `E:resolveBytes -> ${asset ? asset.bytes.byteLength : "NULL(读不到字节)"}`, {
+          traceId: diagId,
+          url: url.slice(0, 80),
+          ok: Boolean(asset),
+          byteLen: asset?.bytes.byteLength ?? 0,
+          contentType: asset?.contentType ?? null,
+          hasOriginalUrl: Boolean(asset?.originalUrl),
+        });
+      }
       return asset ? asset.bytes : null;
     },
     extractText: (att) => extractTextFromLocalAsset(att.url, att.contentType, att.fileName),
   });
+  // ---- F:最终产出几个 image/file part(DEBUG,仅带附件) ----
+  if (attachments.length > 0) {
+    const imageParts = Array.isArray(userContent)
+      ? userContent.filter((p) => p.type === "image").length
+      : 0;
+    const fileParts = Array.isArray(userContent)
+      ? userContent.filter((p) => p.type === "file").length
+      : 0;
+    logger.debug("agent", "F:user content built", {
+      traceId: diagId,
+      isArray: Array.isArray(userContent),
+      imageParts,
+      fileParts,
+      totalAttachmentCount: attachments.length,
+    });
+  }
   const userMessage: CoreMessage = { role: "user", content: userContent as CoreUserMessage["content"] };
   const messages: CoreMessage[] = [...priorMessages, userMessage];
 

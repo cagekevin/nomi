@@ -6,6 +6,8 @@ import { loadOrCreateArtifactPreviewSecret } from "./artifactProjection";
 import { resolveProductionDeepLink, type ProductionDeepLinkTarget } from "./productionDeepLink";
 import { createProductionRunRepository } from "./productionRunRepository";
 import { EventChannels } from "../shared/ipcChannels";
+import { publishTo } from "../events/eventBus";
+import { logger } from "../logger";
 
 type InstallArgs = {
   isMcpStdio: boolean;
@@ -28,7 +30,7 @@ export function installProductionRunDesktopLifecycle(args: InstallArgs): {
     if (window.isMinimized()) window.restore();
     window.show();
     window.focus();
-    window.webContents.send(EventChannels.productionDeepLink, target);
+    publishTo(window.webContents, EventChannels.productionDeepLink, target);
   }
 
   function handleProductionDeepLink(rawUrl: string): void {
@@ -40,7 +42,7 @@ export function installProductionRunDesktopLifecycle(args: InstallArgs): {
       const target = resolveProductionDeepLink(rawUrl, createProductionRunRepository());
       deliverProductionDeepLink(target);
     } catch (error) {
-      console.warn("[nomi:desktop] ignored invalid production deep link", error instanceof Error ? error.message : String(error));
+      logger.warn("export", "ignored invalid production deep link", { message: error instanceof Error ? error.message : String(error) });
     }
   }
 
