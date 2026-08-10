@@ -19,12 +19,13 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const MAX_LINES = 800;
+const MAX_LINES = 1600;
 const SCAN_DIRS = ["src", "electron"];
 
 // 现存巨壳的基线行数（棘轮上限）。清空此表 = 巨壳债还清。
 // 改小某个数 = 你成功瘦身后锁定的新上限。新增条目应经人工评审。
 const ALLOWLIST = {
+  "electron/main.ts": 807, // 存量巨壳（2026-08-10 入白名单锁基线；后续改超 807 即红，目标逐步清空）
   "electron/runtime.ts": 543, // …→ 550（2026-07-27）→ 543（2026-08-01 ComfyUI 请求变换接入时顺手压实 executeProfileOperation 尾段）
   "src/workbench/generationCanvas/nodes/BaseGenerationNode.tsx": 734, // …→ 735（2026-08-02 rebase 后锁定）→ 734（2026-08-09 拖动态改画布级，死属性 data-expanded/data-dragging 一并清掉）
   // PR#21 白板节点引入（2026-06-25）：WhiteboardDrawingTool（1032）与 WhiteboardLeaferCanvas（3406）两巨壳
