@@ -1,6 +1,7 @@
 import { ipcMain } from "electron";
 import fs from "node:fs";
 import path from "node:path";
+import { IpcChannels } from "../../shared/ipcChannels";
 import { writeJsonFileAtomic } from "../../jsonFile";
 import { readProject } from "../../projects/repository";
 import { workspaceNomiDir } from "../../workspace/workspacePaths";
@@ -26,14 +27,14 @@ function normalizeSettingsPayload(value: unknown): Record<string, unknown> {
 }
 
 export function registerBrowserPromptExtractionSettingsIpc(): void {
-  ipcMain.handle("browser:prompt-extraction-settings:read", async (_event, payload: { projectId?: unknown }) => {
+  ipcMain.handle(IpcChannels.browserPromptExtractionSettingsRead, async (_event, payload: { projectId?: unknown }) => {
     const filePath = browserPromptExtractionSettingsFile(String(payload?.projectId || ""));
     if (!fs.existsSync(filePath)) return { ok: true, settings: null };
     const raw = fs.readFileSync(filePath, "utf8");
     return { ok: true, settings: normalizeSettingsPayload(JSON.parse(raw)) };
   });
 
-  ipcMain.handle("browser:prompt-extraction-settings:write", async (_event, payload: { projectId?: unknown; settings?: unknown }) => {
+  ipcMain.handle(IpcChannels.browserPromptExtractionSettingsWrite, async (_event, payload: { projectId?: unknown; settings?: unknown }) => {
     const filePath = browserPromptExtractionSettingsFile(String(payload?.projectId || ""));
     const settings = normalizeSettingsPayload(payload?.settings);
     writeJsonFileAtomic(filePath, settings);

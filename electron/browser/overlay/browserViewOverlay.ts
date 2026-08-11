@@ -1,5 +1,6 @@
 import { BrowserWindow, screen } from "electron";
 import type { Rectangle, WebContents } from "electron";
+import { EventChannels } from "../../shared/ipcChannels";
 import path from "node:path";
 import { installBrowserResourceCaptureBridge } from "../core/browserViewBridges";
 import { browserAssetOverlaysByWindow, browserViews } from "../core/browserViewState";
@@ -101,7 +102,7 @@ export function sendBrowserAssetOverlayConfig(
   captureRequest: BrowserAssetOverlayCaptureRequest | null = null,
 ): void {
   if (record.window.isDestroyed()) return;
-  record.window.webContents.send("browser:asset-overlay:config", {
+  record.window.webContents.send(EventChannels.browserAssetOverlayConfig, {
     opened: record.window.isVisible(),
     viewId: record.viewId,
     bounds: record.hostBounds,
@@ -113,7 +114,7 @@ export function sendBrowserAssetOverlayConfig(
 export function sendBrowserAssetOverlayState(record: BrowserAssetOverlayRecord, opened = record.window.isVisible()): void {
   const owner = BrowserWindow.fromId(record.ownerWindowId);
   if (!owner || owner.isDestroyed()) return;
-  owner.webContents.send("browser:asset-overlay:state", {
+  owner.webContents.send(EventChannels.browserAssetOverlayState, {
     opened,
     dockMode: opened ? record.dockMode : null,
     popoverRect: opened ? record.popoverRect : null,

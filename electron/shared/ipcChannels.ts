@@ -212,6 +212,41 @@ export const IpcChannels = {
   updateDownload: "nomi:update:download",
   updateInstall: "nomi:update:install",
   updateOpenRelease: "nomi:update:open-release",
+
+  // ── browser（应用内浏览器 WebContentsView）────────────────────────────────
+  // 2026-08-11 收编：此前整个 browser:* 域是裸字符串逃逸（改造 A 漏网），
+  // 请求类（ipcMain.handle/on ↔ ipcRenderer.invoke/send）统一收进这里；
+  // 主进程→前端单向事件（webContents.send）见 EventChannels。
+  browserViewCreate: "browser:view:create",
+  browserViewDestroy: "browser:view:destroy",
+  browserViewNavigate: "browser:view:navigate",
+  browserViewBack: "browser:view:back",
+  browserViewForward: "browser:view:forward",
+  browserViewReload: "browser:view:reload",
+  browserViewResize: "browser:view:resize",
+  browserViewShow: "browser:view:show",
+  browserViewHide: "browser:view:hide",
+  browserViewImportMedia: "browser:view:import-media",
+  browserViewCapturePromptImage: "browser:view:capture-prompt-image",
+  browserViewSelectPromptScreenshot: "browser:view:select-prompt-screenshot",
+  browserViewCapturePromptScreenshot: "browser:view:capture-prompt-screenshot",
+  browserViewSetResourceCapture: "browser:view:set-resource-capture",
+  browserViewCaptureResource: "browser:view:capture-resource",
+  browserChromeMenuShow: "browser:chrome-menu:show",
+  browserChromeMenuSelect: "browser:chrome-menu:select",
+  browserChromeMenuCancel: "browser:chrome-menu:cancel",
+  browserAssetOverlayOpen: "browser:asset-overlay:open",
+  browserAssetOverlayUpdateHost: "browser:asset-overlay:update-host",
+  browserAssetOverlayClose: "browser:asset-overlay:close",
+  browserAssetOverlayCaptureRequest: "browser:asset-overlay:capture-request",
+  browserAssetOverlayReady: "browser:asset-overlay:ready",
+  browserAssetOverlaySetInteractive: "browser:asset-overlay:set-interactive",
+  browserAssetOverlayFinishDrag: "browser:asset-overlay:finish-drag",
+  browserAssetOverlaySetState: "browser:asset-overlay:set-state",
+  browserAssetOverlayImportToCanvas: "browser:asset-overlay:import-to-canvas",
+  browserAssetOverlayCanvasImportAvailable: "browser:asset-overlay:canvas-import-available",
+  browserPromptExtractionSettingsRead: "browser:prompt-extraction-settings:read",
+  browserPromptExtractionSettingsWrite: "browser:prompt-extraction-settings:write",
 } as const;
 
 /**
@@ -233,6 +268,14 @@ export const EventChannels = {
   productionDeepLink: "nomi:production-deep-link",
   updateEvent: "nomi:update:event",
   agentsChatV2Event: "nomi:agents:chatV2:event",
+  // browser 域主进程→前端单向事件（2026-08-11 收编，见 IpcChannels.browser*）。
+  browserViewPromptCapture: "browser:view:prompt-capture",
+  browserViewTextPromptSave: "browser:view:text-prompt-save",
+  browserViewResourceCapture: "browser:view:resource-capture",
+  browserViewState: "browser:view:state",
+  browserAssetOverlayConfig: "browser:asset-overlay:config",
+  browserAssetOverlayState: "browser:asset-overlay:state",
+  browserAssetOverlayImportToCanvas: "browser:asset-overlay:import-to-canvas",
 } as const;
 
 export type IpcChannel = (typeof IpcChannels)[keyof typeof IpcChannels];

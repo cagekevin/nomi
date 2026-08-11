@@ -1,4 +1,5 @@
 import { BrowserWindow, WebContentsView, ipcMain, session, shell } from "electron";
+import { EventChannels, IpcChannels } from "../../shared/ipcChannels";
 import {
   BROWSER_IMAGE_DRAG_END_CONSOLE_MESSAGE,
   BROWSER_IMAGE_DRAG_START_CONSOLE_PREFIX,
@@ -125,7 +126,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
         const payload = JSON.parse(message.slice(BROWSER_IMAGE_PROMPT_CONSOLE_PREFIX.length)) as BrowserResourceCapturePayload;
         const url = typeof payload?.url === "string" ? payload.url.trim() : "";
         if (!url) {
-          win.webContents.send("browser:view:prompt-capture", {
+          win.webContents.send(EventChannels.browserViewPromptCapture, {
             ok: false,
             viewId: record.viewId,
             tabId: record.tabId,
@@ -133,7 +134,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
           });
           return;
         }
-        win.webContents.send("browser:view:prompt-capture", {
+        win.webContents.send(EventChannels.browserViewPromptCapture, {
           ok: true,
           viewId: record.viewId,
           tabId: record.tabId,
@@ -146,7 +147,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
           sourceRect: normalizeCaptureSourceRect(record, payload?.sourceRect) || undefined,
         });
       } catch (error) {
-        win.webContents.send("browser:view:prompt-capture", {
+        win.webContents.send(EventChannels.browserViewPromptCapture, {
           ok: false,
           viewId: record.viewId,
           tabId: record.tabId,
@@ -168,7 +169,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
         };
         const prompt = typeof payload?.prompt === "string" ? payload.prompt.trim() : "";
         if (!prompt) return;
-        win.webContents.send("browser:view:text-prompt-save", {
+        win.webContents.send(EventChannels.browserViewTextPromptSave, {
           ok: true,
           viewId: record.viewId,
           tabId: record.tabId,
@@ -180,7 +181,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
           pageTitle: typeof payload.pageTitle === "string" ? payload.pageTitle : "",
         });
       } catch (error) {
-        win.webContents.send("browser:view:text-prompt-save", {
+        win.webContents.send(EventChannels.browserViewTextPromptSave, {
           ok: false,
           viewId: record.viewId,
           tabId: record.tabId,
@@ -206,7 +207,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
   contents.on("page-favicon-updated", (_event, favicons) => {
     const win = BrowserWindow.fromId(record.ownerWindowId);
     if (!win || win.isDestroyed()) return;
-    win.webContents.send("browser:view:state", {
+    win.webContents.send(EventChannels.browserViewState, {
       viewId: record.viewId,
       tabId: record.tabId,
       url: contents.getURL(),
@@ -239,7 +240,7 @@ function attachBrowserViewEvents(record: BrowserViewRecord): void {
 export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void {
   setBrowserAssetOverlayRendererUrlResolver(rendererUrlResolver);
 
-  ipcMain.handle("browser:view:create", async (event, payload: BrowserViewCreatePayload = {}) => {
+  ipcMain.handle(IpcChannels.browserViewCreate, async (event, payload: BrowserViewCreatePayload = {}) => {
     const win = getSenderWindow(event.sender);
     const tabId = String(payload.tabId || "").trim();
     if (!tabId) throw new Error("tabId is required");
@@ -274,33 +275,33 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     return { viewId: record.viewId };
   });
 
-  ipcMain.on("browser:view:destroy", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewDestroy, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     destroyBrowserView(record);
   });
 
-  ipcMain.on("browser:view:navigate", (event, payload: BrowserViewNavigatePayload) => {
+  ipcMain.on(IpcChannels.browserViewNavigate, (event, payload: BrowserViewNavigatePayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     const url = normalizeBrowserUrl(payload.url);
     void record.view.webContents.loadURL(url);
     sendBrowserViewState(record);
   });
 
-  ipcMain.on("browser:view:back", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewBack, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     if (record.view.webContents.canGoBack()) record.view.webContents.goBack();
   });
 
-  ipcMain.on("browser:view:forward", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewForward, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     if (record.view.webContents.canGoForward()) record.view.webContents.goForward();
   });
 
-  ipcMain.on("browser:view:reload", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewReload, (event, payload: BrowserViewIdPayload) => {
     getBrowserViewForSender(event.sender, payload).view.webContents.reload();
   });
 
-  ipcMain.on("browser:view:resize", (event, payload: BrowserViewResizePayload) => {
+  ipcMain.on(IpcChannels.browserViewResize, (event, payload: BrowserViewResizePayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     const bounds = normalizeBounds(payload.bounds);
     if (sameRectangle(record.lastBounds, bounds)) return;
@@ -309,7 +310,7 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     record.view.setBounds(bounds);
   });
 
-  ipcMain.on("browser:view:show", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewShow, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     bringBrowserViewToFront(record);
     record.view.setBounds(record.lastBounds);
@@ -317,64 +318,64 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     sendBrowserViewState(record);
   });
 
-  ipcMain.on("browser:view:hide", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewHide, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     record.view.webContents.setBackgroundThrottling(true);
     record.view.setVisible(false);
     void record.view.webContents.session.cookies.flushStore().catch(() => undefined);
   });
 
-  ipcMain.handle("browser:view:import-media", async (event, payload: BrowserViewImportMediaPayload) => {
+  ipcMain.handle(IpcChannels.browserViewImportMedia, async (event, payload: BrowserViewImportMediaPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     return importBrowserMedia(record, payload);
   });
 
-  ipcMain.handle("browser:view:capture-prompt-image", async (event, payload: BrowserViewPromptImagePayload) => {
+  ipcMain.handle(IpcChannels.browserViewCapturePromptImage, async (event, payload: BrowserViewPromptImagePayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     return captureBrowserPromptImage(record, payload);
   });
 
-  ipcMain.handle("browser:view:select-prompt-screenshot", async (event, payload: BrowserViewIdPayload) => {
+  ipcMain.handle(IpcChannels.browserViewSelectPromptScreenshot, async (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     return selectBrowserPromptScreenshotRect(record);
   });
 
-  ipcMain.handle("browser:view:capture-prompt-screenshot", async (event, payload: BrowserViewPromptScreenshotPayload) => {
+  ipcMain.handle(IpcChannels.browserViewCapturePromptScreenshot, async (event, payload: BrowserViewPromptScreenshotPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     return captureBrowserPromptScreenshot(record, payload);
   });
 
-  ipcMain.on("browser:view:set-resource-capture", (event, payload: BrowserViewIdPayload & { enabled?: unknown }) => {
+  ipcMain.on(IpcChannels.browserViewSetResourceCapture, (event, payload: BrowserViewIdPayload & { enabled?: unknown }) => {
     const record = getBrowserViewForSender(event.sender, payload);
     record.resourceCaptureEnabled = Boolean(payload.enabled);
     void installBrowserResourceCaptureBridge(record, record.resourceCaptureEnabled);
   });
 
-  ipcMain.on("browser:view:capture-resource", (event, payload: BrowserViewIdPayload) => {
+  ipcMain.on(IpcChannels.browserViewCaptureResource, (event, payload: BrowserViewIdPayload) => {
     const record = getBrowserViewForSender(event.sender, payload);
     if (!record.resourceCaptureEnabled) return;
     void captureBrowserResource(record);
   });
 
-  ipcMain.handle("browser:chrome-menu:show", (event, payload: BrowserChromeMenuPayload) => {
+  ipcMain.handle(IpcChannels.browserChromeMenuShow, (event, payload: BrowserChromeMenuPayload) => {
     const owner = getOwnerWindowForSender(event.sender);
     return showBrowserChromeMenu(owner, normalizeBrowserChromeMenuPayload(payload));
   });
 
-  ipcMain.on("browser:chrome-menu:select", (event, id: unknown) => {
+  ipcMain.on(IpcChannels.browserChromeMenuSelect, (event, id: unknown) => {
     selectBrowserChromeMenu(event.sender.id, id);
   });
 
-  ipcMain.on("browser:chrome-menu:cancel", (event) => {
+  ipcMain.on(IpcChannels.browserChromeMenuCancel, (event) => {
     cancelBrowserChromeMenu(event.sender.id);
   });
 
-  ipcMain.on("browser:asset-overlay:open", (event, payload: BrowserAssetOverlayPayload) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayOpen, (event, payload: BrowserAssetOverlayPayload) => {
     const owner = getOwnerWindowForSender(event.sender);
     openBrowserAssetOverlay(owner, payload, payload.captureRequest ?? null);
   });
 
-  ipcMain.on("browser:asset-overlay:update-host", (event, payload: BrowserAssetOverlayPayload) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayUpdateHost, (event, payload: BrowserAssetOverlayPayload) => {
     const record = getOverlayForSender(event.sender);
     if (!record) return;
     if (payload.viewId === null) {
@@ -388,19 +389,19 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     sendBrowserAssetOverlayConfig(record);
   });
 
-  ipcMain.on("browser:asset-overlay:close", (event) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayClose, (event) => {
     const record = getOverlayForSender(event.sender);
     if (record) closeBrowserAssetOverlay(record);
   });
 
-  ipcMain.on("browser:asset-overlay:capture-request", (event, payload: BrowserAssetOverlayCaptureRequest) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayCaptureRequest, (event, payload: BrowserAssetOverlayCaptureRequest) => {
     const owner = getOwnerWindowForSender(event.sender);
     const record = browserAssetOverlaysByWindow.get(owner.id);
     if (!record) return;
     showBrowserAssetOverlay(record, payload);
   });
 
-  ipcMain.on("browser:asset-overlay:ready", (event) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayReady, (event) => {
     const record = getOverlayForSender(event.sender);
     if (!record) return;
     record.rendererReady = true;
@@ -412,20 +413,20 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     sendBrowserAssetOverlayState(record, record.window.isVisible());
   });
 
-  ipcMain.on("browser:asset-overlay:set-interactive", (event, payload: { interactive?: unknown }) => {
+  ipcMain.on(IpcChannels.browserAssetOverlaySetInteractive, (event, payload: { interactive?: unknown }) => {
     const record = getOverlayForSender(event.sender);
     if (!record || record.window.isDestroyed()) return;
     record.pointerInteractive = payload.interactive === true;
     applyBrowserAssetOverlayMouseEvents(record);
   });
 
-  ipcMain.on("browser:asset-overlay:finish-drag", (event) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayFinishDrag, (event) => {
     const record = getOverlayForSender(event.sender);
     if (!record || record.window.isDestroyed()) return;
     finishBrowserAssetOverlayDrag(record);
   });
 
-  ipcMain.on("browser:asset-overlay:set-state", (event, payload: BrowserAssetOverlayStatePayload) => {
+  ipcMain.on(IpcChannels.browserAssetOverlaySetState, (event, payload: BrowserAssetOverlayStatePayload) => {
     const record = getOverlayForSender(event.sender);
     if (!record) return;
     const nextDockMode = normalizeOverlayDockMode(payload.dockMode);
@@ -447,15 +448,15 @@ export function registerBrowserViewIpc(rendererUrlResolver?: () => string): void
     sendBrowserAssetOverlayState(record, record.window.isVisible());
   });
 
-  ipcMain.on("browser:asset-overlay:import-to-canvas", (event, payload: unknown) => {
+  ipcMain.on(IpcChannels.browserAssetOverlayImportToCanvas, (event, payload: unknown) => {
     const owner = getOwnerWindowForSender(event.sender);
     if (owner.isDestroyed()) return;
-    owner.webContents.send("browser:asset-overlay:import-to-canvas", payload);
+    owner.webContents.send(EventChannels.browserAssetOverlayImportToCanvas, payload);
   });
 
   // contained 素材盒问「父窗现在有没有画布导入目标」——overlay 是独立窗口，DOM 探针跨窗探不到。
   // 选择器与渲染层 browserAssetPopoverConstants.CANVAS_IMPORT_TARGET_SELECTOR 同义（跨进程无法共享常量）。
-  ipcMain.handle("browser:asset-overlay:canvas-import-available", async (event) => {
+  ipcMain.handle(IpcChannels.browserAssetOverlayCanvasImportAvailable, async (event) => {
     try {
       const owner = getOwnerWindowForSender(event.sender);
       if (owner.isDestroyed()) return false;

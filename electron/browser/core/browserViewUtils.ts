@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { Rectangle, WebContents } from "electron";
+import { EventChannels } from "../../shared/ipcChannels";
 import { browserViews, browserViewsByWindow } from "./browserViewState";
 import type { BrowserViewIdPayload, BrowserViewRecord } from "./browserViewTypes";
 
@@ -68,7 +69,7 @@ export function sendBrowserViewState(record: BrowserViewRecord): void {
   const win = BrowserWindow.fromId(record.ownerWindowId);
   if (!win || win.isDestroyed()) return;
   const contents = record.view.webContents;
-  win.webContents.send("browser:view:state", {
+  win.webContents.send(EventChannels.browserViewState, {
     viewId: record.viewId,
     tabId: record.tabId,
     url: contents.getURL(),

@@ -1,5 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { DownloadItem, WebContents } from "electron";
+import { EventChannels } from "../../shared/ipcChannels";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -148,7 +149,7 @@ export async function captureBrowserResource(record: BrowserViewRecord): Promise
     const url = typeof captured?.url === "string" ? captured.url.trim() : "";
     const mediaType = normalizeBrowserMediaType(captured?.mediaType);
     if (!url || !mediaType) {
-      win.webContents.send("browser:view:resource-capture", {
+      win.webContents.send(EventChannels.browserViewResourceCapture, {
         ok: false,
         viewId: record.viewId,
         tabId: record.tabId,
@@ -159,7 +160,7 @@ export async function captureBrowserResource(record: BrowserViewRecord): Promise
     // 候选快照留在 record 上：capturePage 视觉降级按 url 匹配复用这块矩形（不再现场重找元素）。
     record.lastResourceCapture = { url, mediaType, sourceRect: captured?.sourceRect, capturedAt: Date.now() };
     const sourceRect = normalizeCaptureSourceRect(record, captured?.sourceRect);
-    win.webContents.send("browser:view:resource-capture", {
+    win.webContents.send(EventChannels.browserViewResourceCapture, {
       ok: true,
       viewId: record.viewId,
       tabId: record.tabId,
@@ -172,7 +173,7 @@ export async function captureBrowserResource(record: BrowserViewRecord): Promise
       sourceRect: sourceRect || undefined,
     });
   } catch (error) {
-    win.webContents.send("browser:view:resource-capture", {
+    win.webContents.send(EventChannels.browserViewResourceCapture, {
       ok: false,
       viewId: record.viewId,
       tabId: record.tabId,

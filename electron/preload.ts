@@ -107,8 +107,8 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     },
   },
   browserChromeMenu: {
-    select: (id: unknown) => ipcRenderer.send("browser:chrome-menu:select", id),
-    cancel: () => ipcRenderer.send("browser:chrome-menu:cancel"),
+    select: (id: unknown) => ipcRenderer.send(IpcChannels.browserChromeMenuSelect, id),
+    cancel: () => ipcRenderer.send(IpcChannels.browserChromeMenuCancel),
   },
   proxy: {
     get: () => ipcRenderer.invoke(IpcChannels.proxyGet),
@@ -183,87 +183,87 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     pickSaveDir: () => ipcRenderer.invoke(IpcChannels.settingsPickDir) as Promise<{ dir: string }>,
   },
   browser: {
-    createView: (payload: unknown) => ipcRenderer.invoke("browser:view:create", payload) as Promise<{ viewId: number }>,
-    destroyView: (payload: unknown) => ipcRenderer.send("browser:view:destroy", payload),
-    navigate: (payload: unknown) => ipcRenderer.send("browser:view:navigate", payload),
-    back: (payload: unknown) => ipcRenderer.send("browser:view:back", payload),
-    forward: (payload: unknown) => ipcRenderer.send("browser:view:forward", payload),
-    reload: (payload: unknown) => ipcRenderer.send("browser:view:reload", payload),
-    resize: (payload: unknown) => ipcRenderer.send("browser:view:resize", payload),
-    show: (payload: unknown) => ipcRenderer.send("browser:view:show", payload),
-    hide: (payload: unknown) => ipcRenderer.send("browser:view:hide", payload),
-    importMedia: (payload: unknown) => ipcRenderer.invoke("browser:view:import-media", payload),
-    capturePromptImage: (payload: unknown) => ipcRenderer.invoke("browser:view:capture-prompt-image", payload),
+    createView: (payload: unknown) => ipcRenderer.invoke(IpcChannels.browserViewCreate, payload) as Promise<{ viewId: number }>,
+    destroyView: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewDestroy, payload),
+    navigate: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewNavigate, payload),
+    back: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewBack, payload),
+    forward: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewForward, payload),
+    reload: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewReload, payload),
+    resize: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewResize, payload),
+    show: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewShow, payload),
+    hide: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewHide, payload),
+    importMedia: (payload: unknown) => ipcRenderer.invoke(IpcChannels.browserViewImportMedia, payload),
+    capturePromptImage: (payload: unknown) => ipcRenderer.invoke(IpcChannels.browserViewCapturePromptImage, payload),
     selectPromptScreenshot: (payload: unknown) =>
-      ipcRenderer.invoke("browser:view:select-prompt-screenshot", payload),
+      ipcRenderer.invoke(IpcChannels.browserViewSelectPromptScreenshot, payload),
     capturePromptScreenshot: (payload: unknown) =>
-      ipcRenderer.invoke("browser:view:capture-prompt-screenshot", payload),
+      ipcRenderer.invoke(IpcChannels.browserViewCapturePromptScreenshot, payload),
     readPromptExtractionSettings: (payload: unknown) =>
-      ipcRenderer.invoke("browser:prompt-extraction-settings:read", payload),
+      ipcRenderer.invoke(IpcChannels.browserPromptExtractionSettingsRead, payload),
     writePromptExtractionSettings: (payload: unknown) =>
-      ipcRenderer.invoke("browser:prompt-extraction-settings:write", payload),
-    setResourceCapture: (payload: unknown) => ipcRenderer.send("browser:view:set-resource-capture", payload),
-    captureResource: (payload: unknown) => ipcRenderer.send("browser:view:capture-resource", payload),
-    showChromeMenu: (payload: unknown) => ipcRenderer.invoke("browser:chrome-menu:show", payload),
+      ipcRenderer.invoke(IpcChannels.browserPromptExtractionSettingsWrite, payload),
+    setResourceCapture: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewSetResourceCapture, payload),
+    captureResource: (payload: unknown) => ipcRenderer.send(IpcChannels.browserViewCaptureResource, payload),
+    showChromeMenu: (payload: unknown) => ipcRenderer.invoke(IpcChannels.browserChromeMenuShow, payload),
     assetOverlay: {
-      open: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:open", payload),
-      updateHost: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:update-host", payload),
-      close: () => ipcRenderer.send("browser:asset-overlay:close"),
-      captureRequest: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:capture-request", payload),
-      ready: () => ipcRenderer.send("browser:asset-overlay:ready"),
-      setInteractive: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:set-interactive", payload),
-      finishDrag: () => ipcRenderer.send("browser:asset-overlay:finish-drag"),
-      setState: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:set-state", payload),
-      importToCanvas: (payload: unknown) => ipcRenderer.send("browser:asset-overlay:import-to-canvas", payload),
-      canvasImportAvailable: () => ipcRenderer.invoke("browser:asset-overlay:canvas-import-available"),
+      open: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlayOpen, payload),
+      updateHost: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlayUpdateHost, payload),
+      close: () => ipcRenderer.send(IpcChannels.browserAssetOverlayClose),
+      captureRequest: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlayCaptureRequest, payload),
+      ready: () => ipcRenderer.send(IpcChannels.browserAssetOverlayReady),
+      setInteractive: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlaySetInteractive, payload),
+      finishDrag: () => ipcRenderer.send(IpcChannels.browserAssetOverlayFinishDrag),
+      setState: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlaySetState, payload),
+      importToCanvas: (payload: unknown) => ipcRenderer.send(IpcChannels.browserAssetOverlayImportToCanvas, payload),
+      canvasImportAvailable: () => ipcRenderer.invoke(IpcChannels.browserAssetOverlayCanvasImportAvailable),
       onConfig: (callback: (event: unknown) => void) => {
         const listener = (_event: unknown, payload: unknown) => callback(payload);
-        ipcRenderer.on("browser:asset-overlay:config", listener as never);
+        ipcRenderer.on(EventChannels.browserAssetOverlayConfig, listener as never);
         return () => {
-          ipcRenderer.removeListener("browser:asset-overlay:config", listener as never);
+          ipcRenderer.removeListener(EventChannels.browserAssetOverlayConfig, listener as never);
         };
       },
       onState: (callback: (event: unknown) => void) => {
         const listener = (_event: unknown, payload: unknown) => callback(payload);
-        ipcRenderer.on("browser:asset-overlay:state", listener as never);
+        ipcRenderer.on(EventChannels.browserAssetOverlayState, listener as never);
         return () => {
-          ipcRenderer.removeListener("browser:asset-overlay:state", listener as never);
+          ipcRenderer.removeListener(EventChannels.browserAssetOverlayState, listener as never);
         };
       },
       onImportToCanvas: (callback: (event: unknown) => void) => {
         const listener = (_event: unknown, payload: unknown) => callback(payload);
-        ipcRenderer.on("browser:asset-overlay:import-to-canvas", listener as never);
+        ipcRenderer.on(EventChannels.browserAssetOverlayImportToCanvas, listener as never);
         return () => {
-          ipcRenderer.removeListener("browser:asset-overlay:import-to-canvas", listener as never);
+          ipcRenderer.removeListener(EventChannels.browserAssetOverlayImportToCanvas, listener as never);
         };
       },
     },
     onPromptCapture: (callback: (event: unknown) => void) => {
       const listener = (_event: unknown, payload: unknown) => callback(payload);
-      ipcRenderer.on("browser:view:prompt-capture", listener as never);
+      ipcRenderer.on(EventChannels.browserViewPromptCapture, listener as never);
       return () => {
-        ipcRenderer.removeListener("browser:view:prompt-capture", listener as never);
+        ipcRenderer.removeListener(EventChannels.browserViewPromptCapture, listener as never);
       };
     },
     onTextPromptSave: (callback: (event: unknown) => void) => {
       const listener = (_event: unknown, payload: unknown) => callback(payload);
-      ipcRenderer.on("browser:view:text-prompt-save", listener as never);
+      ipcRenderer.on(EventChannels.browserViewTextPromptSave, listener as never);
       return () => {
-        ipcRenderer.removeListener("browser:view:text-prompt-save", listener as never);
+        ipcRenderer.removeListener(EventChannels.browserViewTextPromptSave, listener as never);
       };
     },
     onResourceCapture: (callback: (event: unknown) => void) => {
       const listener = (_event: unknown, payload: unknown) => callback(payload);
-      ipcRenderer.on("browser:view:resource-capture", listener as never);
+      ipcRenderer.on(EventChannels.browserViewResourceCapture, listener as never);
       return () => {
-        ipcRenderer.removeListener("browser:view:resource-capture", listener as never);
+        ipcRenderer.removeListener(EventChannels.browserViewResourceCapture, listener as never);
       };
     },
     onState: (callback: (event: unknown) => void) => {
       const listener = (_event: unknown, payload: unknown) => callback(payload);
-      ipcRenderer.on("browser:view:state", listener as never);
+      ipcRenderer.on(EventChannels.browserViewState, listener as never);
       return () => {
-        ipcRenderer.removeListener("browser:view:state", listener as never);
+        ipcRenderer.removeListener(EventChannels.browserViewState, listener as never);
       };
     },
   },

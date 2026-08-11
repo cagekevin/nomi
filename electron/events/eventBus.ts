@@ -40,6 +40,71 @@ export interface EventMap {
   /** @TODO 待补：来自 autoUpdater 的真实更新 payload 类型。 */
   updateEvent: unknown;
   agentsChatV2Event: { sessionId: string; event: unknown };
+  // ── browser 域单向事件（2026-08-11 收编）。payload 类型与 src/desktop/bridge.ts 的
+  // DesktopBrowser* 同形（electron/tsconfig rootDir 限制无法 import src 侧，如实转录）。
+  browserViewState: {
+    viewId: number;
+    tabId: string;
+    url: string;
+    title: string;
+    favicon?: string;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    loading: boolean;
+  };
+  browserAssetOverlayConfig: {
+    opened: boolean;
+    viewId: number | null;
+    bounds: { x: number; y: number; width: number; height: number } | null;
+    captureEnabled?: boolean;
+    captureRequest?: unknown;
+  };
+  browserAssetOverlayState: {
+    opened: boolean;
+    dockMode?: unknown;
+    popoverRect?: { x: number; y: number; width: number; height: number } | null;
+    captureEnabled?: boolean;
+  };
+  browserViewPromptCapture:
+    | {
+        ok: true;
+        viewId: number;
+        tabId: string;
+        url: string;
+        title?: string;
+        fileName?: string;
+        pageUrl?: string;
+        pageTitle?: string;
+        extractionMode?: string;
+        sourceRect?: unknown;
+      }
+    | { ok: false; viewId: number; tabId: string; reason: "empty" | "error"; message?: string };
+  browserViewResourceCapture:
+    | {
+        ok: true;
+        viewId: number;
+        tabId: string;
+        url: string;
+        mediaType: "image" | "video";
+        title?: string;
+        fileName?: string;
+        pageUrl?: string;
+        pageTitle?: string;
+        sourceRect?: unknown;
+      }
+    | { ok: false; viewId: number; tabId: string; reason: "empty" | "error"; message?: string };
+  browserViewTextPromptSave:
+    | {
+        ok: true;
+        viewId: number;
+        tabId: string;
+        prompt: string;
+        promptType: string;
+        pageUrl?: string;
+        pageTitle?: string;
+      }
+    | { ok: false; viewId: number; tabId: string; reason: "error"; message?: string };
+  browserAssetOverlayImportToCanvas: unknown;
 }
 
 /** 广播到所有非销毁窗口。payload 类型按 channel 校验。 */
