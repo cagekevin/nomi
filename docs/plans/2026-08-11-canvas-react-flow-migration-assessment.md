@@ -20,6 +20,25 @@
 
 ---
 
+## 〇.1 关键发现：存在「渲染无关的数据层端点」（用户提问触发）
+
+**用户问「不能找到我们画布对外的端点吗」——答案：有。** 已核实 `useGenerationCanvasStore` 是一个**渲染无关的数据层**：
+
+| 证据 | 来源 |
+|---|---|
+| store 的 import **完全渲染无关**（只 zustand + model/graphOps + action 模块 + events，**无任何 DOM/SVG/react-flow**）| `store/generationCanvasStore.ts:1-29` |
+| `GenerationCanvasState` 含 `nodes: GenerationCanvasNode[]` / `edges: GenerationCanvasEdge[]` + 纯数据 actions（`updateNodes`/`moveSelectedNodes`/`selectNodes`/`connectNodes`/`restoreGraph` 等）| `store/canvasStoreTypes.ts:48-134` |
+| 渲染层（`CanvasEdgeLayer.tsx`）只 `import type { ConnectionAnchorSide } from '../store/...'`——**纯消费 store** | `components/CanvasEdgeLayer.tsx:7` |
+
+**含义**：Nomi 画布的「数据层（store）」与「渲染层（自研 SVG/DOM）」已解耦。理论上可以**保留 store（数据层不动），只把渲染层换成 react-flow**——react-flow 渲染 store 的 nodes/edges，交互经 store 的 actions 回写。这比「3-6 周全换」乐观。
+
+**但必须诚实（不要让这个发现变成过度乐观）**：
+- store 渲染无关 ≠ 迁移简单。**渲染层本身仍是重头**：节点外壳 `BaseGenerationNode`(734) + 边 `CanvasEdgeLayer`(226) + 交互 hook（手势/框选/磁性/拖拽/缩放/LOD）都要在 react-flow 里重做。
+- 「store ↔ react-flow 双份状态」仍是坑：react-flow 内部有自己的 nodes/edges 状态，要让 react-flow 渲染 store 的数据、又回写 store，需要**单向数据流桥**（store 为真相源，react-flow 只渲染+派发事件）。这需要设计，不是白送。
+- 修正后工作量估算：**主要重写「渲染 + 交互」层（约 2-4 周），数据层（store）保留**。比全换乐观，但仍是周级重构，非"下载即用"。
+
+---
+
 ## 一、迁移影响面（实测量化，供审计逐条核对）
 
 ### 1. 画布目录规模（`src/workbench/generationCanvas/`）
@@ -104,14 +123,16 @@
 ## 四、关键判断（给判断不给附和）
 
 **换 react-flow 的收益**：拿到 1mao 全部效果 + react-flow 生态 + 磁吸吸附（react-flow 内置）。
-**换 react-flow 的成本**：约 3-6 周 + 494 文件 / 136 测试 / 6064 行状态机 / **深模块外壳（16 kind 含 scene3d）重写** + 交互/手势/性能全重写 + 大画布性能回退风险。scene3d 3D 内核（R3F/three）独立于画布 2D，非主要阻碍（用户指正）。
+**换 react-flow 的成本（结合「对外端点」发现修正）**：
+- **全换**：约 3-6 周 + 494 文件 / 136 测试 / store(6064 行) / 深模块外壳 / 交互重写。
+- **走对外端点（保留 store，只换渲染层）**：约 2-4 周——store 是渲染无关数据层（§〇.1），可保留，重写「渲染+交互」层。比全换乐观，但仍是周级重构，非"下载即用"。
 
 **结论**：**不建议换**。理由：
 1. **你要的只是"手感"（comet + Handle 放大），不是"换引擎"**——这两个是纯 SVG/CSS 增量，现有自研 SVG 画布 2-3 天就能加（见 `2026-08-11-canvas-hand-feel-from-1mao.md`）。
 2. **Nomi 自研的优势（磁性跟随鼠标、LOD、深模块、scene3d 深度集成）换引擎会毁掉**——即便 react-flow 有磁吸吸附，Nomi 的"跟随鼠标 + 深度定制"仍是 react-flow 给不了的。
-3. **成本收益极不匹配**：为两个动画效果投入 3-6 周 + 拆掉成熟架构，是亏本买卖。
+3. **成本收益极不匹配**：为两个动画效果投入 2-4 周（即便走对外端点）+ 拆掉成熟渲染层，是亏本买卖。
 
-**但如果你坚持换**（比如想彻底对齐 1mao 体验、接受 3-6 周重构），那迁移路径应按上表分 9 阶段、每阶段独立 commit + 真机走查，且**先做深模块外壳 + 状态机适配 POC**（双份状态同步是最可能卡死的点，非 scene3d），POC 不过即停。
+**但如果你坚持换**（想彻底对齐 1mao 体验），推荐**走「对外端点」路径（保留 store + 只换渲染层）**，比全换省一半。迁移需分阶段独立 commit + 真机走查，且**先做「store ↔ react-flow 单向数据流桥」POC**（双份状态同步是最可能卡死的点，§〇.1），POC 不过即停。
 
 ---
 
@@ -121,14 +142,16 @@
 - **不推荐换引擎**：除非用户明确"要彻底对齐 1mao + 接受 1-1.5 月重构"。
 - **待用户拍板**：
   - **A**：不换，走平移方案（comet + Handle，2-3 天）。
-  - **B**：认真评估换引擎，先做 scene3d POC 验证可行性（0.5 天出结论）。
+  - **B**：认真评估换引擎（走对外端点：保留 store + 只换渲染层），先做「store↔react-flow 数据流桥」POC（0.5-1 天出结论）。
   - **C**：暂不动画布，先议「整体设计重做」。
+  - **D**：只补 comet + Handle 手感（A），同时启动「对外端点」抽象（把渲染层与 store 的边界显式化，为未来可选换引擎留口）——折中最稳。
 
 ---
 
 ## 六、待审计清单（审计对照用）
 
 - [ ] 画布 494 文件 / 136 测试 / store+model 6064 行 —— 是否属实（可 `find`/`wc` 复核）
+- [ ] **store 渲染无关（对外端点）**：`generationCanvasStore.ts` 无 DOM/SVG import（:1-29），`GenerationCanvasState` 含纯数据 actions（`canvasStoreTypes.ts:48-134`），`CanvasEdgeLayer.tsx` 只 import store 类型 —— 是否属实（用户提问触发）
 - [ ] scene3d：38 文件用 `@react-three`/`three`，3D 内核独立于画布 2D（`BaseGenerationNode.tsx:543` 作为深模块 body 挂载）—— 用户指正，是否属实
 - [ ] React Flow 有 `connectionRadius` 磁吸 —— 官方文档可查
 - [ ] Nomi 有暗色模式（`colorScheme.ts`）—— 我此前误判已修正
