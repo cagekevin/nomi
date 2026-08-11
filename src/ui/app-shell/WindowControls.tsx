@@ -2,8 +2,9 @@ import React from "react";
 import { IconMinus, IconSquare, IconX } from "@tabler/icons-react";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "react-i18next";
+import { isWindows as detectWindows } from "../../desktop/bridge";
 
-const isWindows = window.nomiDesktop?.platform === "win32";
+const isWindows = detectWindows();
 
 /**
  * Windows 自绘窗口控制（最小化/最大化/关闭）。frame:false 去掉原生标题栏后由它接管。

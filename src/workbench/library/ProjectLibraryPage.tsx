@@ -13,6 +13,7 @@ import {
   IconTrash,
 } from '@tabler/icons-react'
 import { cn } from '../../utils/cn'
+import { isWindows as detectWindows } from '../../desktop/bridge'
 import { ActionCard, NomiLogoMark, NomiWordmark, DesignEmptyState, DesignSearchInput } from '../../design'
 import { NomiImage } from '../../design/media'
 import { WindowControls } from '../../ui/app-shell/WindowControls'
@@ -156,7 +157,7 @@ export default function ProjectLibraryPage({
   // 单一入口互斥：缺文本模型时弱入口隐藏，模型入口 = 状态条（有项目）/ 主 CTA 自动带入（空库）
   const showModelEntry = Boolean(onOpenModelCatalog) && !textModelMissing
   // Windows：库窗也 frame:false，需自绘标题栏才能拖动/关窗。mac/Linux：原生 chrome，右上操作留在 header 原位。
-  const isWindows = window.nomiDesktop?.platform === 'win32'
+  const isWindows = detectWindows()
   const openBrowser = React.useCallback(() => {
     window.dispatchEvent(new CustomEvent('nomi-open-browser'))
   }, [])

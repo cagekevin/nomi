@@ -1,12 +1,13 @@
 import React from 'react'
 import { NomiBrand } from '../../../../design'
+import { isWindows as detectWindows } from '../../../../desktop/bridge'
 import { WindowControls } from '../../../../ui/app-shell/WindowControls'
 import { handleWindowTitlebarDoubleClick } from '../../../../ui/app-shell/windowTitlebarDoubleClick'
 
 // 仅 win32 自绘标题栏：mac/Linux 原生 chrome 自带窗口控制，不自绘不重复（同 WorkbenchShell 平台分流）。
 // win32 下全屏 3D 场景此前盖住自绘标题栏（没有 logo 和最小化/最大化/关闭）——PR#33 修复，
 // 抽成独立组件让 Scene3DFullscreen 守 800 行门（R9）。非 win32 渲染 null。
-const isWindows = window.nomiDesktop?.platform === 'win32'
+const isWindows = detectWindows()
 
 export function Scene3DWindowBar(): JSX.Element | null {
   if (!isWindows) return null

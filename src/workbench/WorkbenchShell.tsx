@@ -11,6 +11,7 @@ import {
     type WorkspaceMode,
 } from "./workbenchStore";
 import { cn } from "../utils/cn";
+import { isWindows as detectWindows } from "../desktop/bridge";
 import ProjectExplorerSidebar from "./explorer/ProjectExplorerSidebar";
 import { lazyWithChunkBoundary } from "../ui/chunkBoundary";
 import { WindowControls } from "../ui/app-shell/WindowControls";
@@ -147,7 +148,7 @@ export default function WorkbenchShell({
     >(() => [workspaceMode]);
 
     // 仅 win32 自绘标题栏：mac/Linux 保持原生窗口 chrome，不渲染 windowbar（P4 通用·按平台分流）。
-    const isWindows = window.nomiDesktop?.platform === "win32";
+    const isWindows = detectWindows();
 
     React.useEffect(() => {
         // store 是 workspaceMode 的唯一真相源：打开项目时各入口已显式设好模式

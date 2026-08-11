@@ -755,6 +755,16 @@ export function getDesktopBridge(): DesktopBridge | null {
   return window.nomiDesktop || null
 }
 
+/** 当前运行平台（'darwin'/'win32'/'linux'...）；非 Electron 运行时返回 ''。UI 层一律经此取，不直接碰 window.nomiDesktop。 */
+export function getPlatform(): string {
+  return getDesktopBridge()?.platform || ''
+}
+
+/** 是否 Windows 自绘标题栏（win32）。UI 层一律经此判断，不直接碰 window.nomiDesktop。 */
+export function isWindows(): boolean {
+  return getPlatform() === 'win32'
+}
+
 export function isDesktopRuntime(): boolean {
   return Boolean(getDesktopBridge())
 }

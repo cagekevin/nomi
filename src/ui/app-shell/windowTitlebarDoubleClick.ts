@@ -1,4 +1,5 @@
 import type React from 'react'
+import { isWindows } from '../../desktop/bridge'
 
 const TITLEBAR_INTERACTIVE_SELECTOR = [
   '.app-no-drag',
@@ -17,7 +18,7 @@ const TITLEBAR_INTERACTIVE_SELECTOR = [
 
 export function handleWindowTitlebarDoubleClick(event: React.MouseEvent<HTMLElement>): void {
   if (event.button !== 0) return
-  if (window.nomiDesktop?.platform !== 'win32') return
+  if (!isWindows()) return
   const target = event.target
   if (target instanceof Element && target.closest(TITLEBAR_INTERACTIVE_SELECTOR)) return
   event.preventDefault()

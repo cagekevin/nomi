@@ -12,11 +12,12 @@ import {
   WorkbenchButton,
 } from '../../design'
 import { cn } from '../../utils/cn'
+import { isWindows as detectWindows } from '../../desktop/bridge'
 import { APP_BAR_ACTION_GROUPS } from './appBarActionGroups'
 
 // 平台分流：win32 下品牌/关于 + 上手清单都让位给 WorkbenchShell 的自绘标题栏（windowbar），
 // 本栏不重复渲染；非 win32（mac/Linux）保持原生窗口，品牌与清单仍住这里——两平台都有家、不丢失、不重复。
-const isWindows = window.nomiDesktop?.platform === 'win32'
+const isWindows = detectWindows()
 
 function openBrowser(): void {
   window.dispatchEvent(new CustomEvent('nomi-open-browser'))
