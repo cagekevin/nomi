@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { EventChannels, IpcChannels } from "./shared/ipcChannels";
+import { SettingsBridgeChannels, type SettingsBridgeContract } from "./shared/bridgeContract";
 
 type SyncResult<T> = { ok: true; value: T } | { ok: false; error: string };
 type ProductionDeepLinkPayload = { projectId: string; runId: string; artifactId?: string };
@@ -18,6 +19,16 @@ function invokeSync<T>(channel: string, ...args: unknown[]): T {
   }
   return result.value;
 }
+
+// POC（2026-08-11）：settings 域契约单一来源——实现对象用 satisfies 约束，漏方法/签名不匹配编译即报。
+const settingsImpl = {
+  projectLocation: {
+    get: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationGet),
+    pick: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationPick),
+    reset: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationReset),
+    reveal: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationReveal),
+  },
+} satisfies SettingsBridgeContract;
 
 contextBridge.exposeInMainWorld("nomiDesktop", {
   platform: process.platform,
@@ -95,12 +106,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
     },
   },
   settings: {
-    projectLocation: {
-      get: () => ipcRenderer.invoke(IpcChannels.settingsProjectLocationGet),
-      pick: () => ipcRenderer.invoke(IpcChannels.settingsProjectLocationPick),
-      reset: () => ipcRenderer.invoke(IpcChannels.settingsProjectLocationReset),
-      reveal: () => ipcRenderer.invoke(IpcChannels.settingsProjectLocationReveal),
-    },
+    projectLocation: settingsImpl.projectLocation,
     automationPolicy: {
       get: () => ipcRenderer.invoke(IpcChannels.settingsAutomationPolicyGet),
       set: (payload: unknown) => ipcRenderer.invoke(IpcChannels.settingsAutomationPolicySet, payload),
