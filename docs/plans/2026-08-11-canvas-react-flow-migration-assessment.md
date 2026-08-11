@@ -3,6 +3,7 @@
 > 日期：2026-08-11
 > 触发：用户「Nomi 手感不好」「借鉴 1mao 效果」「为什么不换 react-flow」「react-flow 有磁吸吸附」「探索一次如果换需要多少工作」「react bug 少、维护省心」「没有拍板，还是让你对比」
 > 性质：**选型对比文档**，不实施。所有数据来自读码实测，标注来源文件:行号，供审计核对。**结论不预设**——给出 A/B/C/D 四路径的成本收益对比，用户拍板。
+> **审计**：2026-08-12 已逐块源码核实并修正 6 处（交互 hook 路径、scene3d 表述、whiteboard 耦合度、store 行数口径、阶段5 工作量低估、重复小节合并）。修正项均注明「2026-08-12 审计」。
 > 核心事实：换 react-flow **走对外端点（保留 store 数据层 + 只换渲染层）约 2-4 周**（store 渲染无关，§〇.1）；**全换约 3-6 周**。**省的是渲染引擎层维护（约 1/3），store/深模块/scene3d 维护没省。**
 
 ---
@@ -61,32 +62,41 @@
 | `nodes/render/NodeCardBody.tsx` | 37 | 🟢 低（节点内容，可复用）|
 
 ### 3. 自研交互 hook（react-flow 有部分能力，但 Nomi 是自研仲裁）
-| hook | 行数 | react-flow 是否有对应 | 迁移 |
+> 实测位置：全部在 `components/` 下（非 `hooks/`）。react-flow 对应性基于其公开能力推断，**未做 POC**，迁移难度以「能否复用自研逻辑」为准。
+
+| hook（实际路径 `components/`）| 行数 | react-flow 是否有对应 | 迁移 |
 |---|---|---|---|
-| `useCanvasPointerInteractions.ts`（手势仲裁）| 104 | ⚠️ 部分（react-flow 有 pan/zoom 默认，但 Nomi 的自定义手势无）| 🟡 高 |
-| `canvasPointerGestureModel.ts`（手势真值表）| 87 | ❌ 无 | 🔴 高 |
-| `useMarqueeSelection.ts`（框选）| 123 | ✅ 有（react-flow selection）| 🟢 低 |
-| `useDragToConnect.ts`（拖拽连线）| 134 | ✅ 有 | 🟢 低 |
-| `useCanvasViewportGestures.ts`（视口手势）| 448 | ⚠️ 部分 | 🟡 高 |
-| `useCanvasTransformStoreSync.ts` | 57 | ❌ 无（自研变换同步）| 🟡 中 |
-| `useCanvasSelectionDrag.ts` | — | ⚠️ 部分 | 🟡 中 |
-| `useCanvasGroupActions.ts` | — | ⚠️ 部分 | 🟡 中 |
-| `CanvasMinimap.tsx` | — | ✅ 有（MiniMap）| 🟢 低 |
+| `components/useCanvasPointerInteractions.ts`（手势仲裁）| 104 | ⚠️ 部分（react-flow 有 pan/zoom 默认，但 Nomi 的自定义手势无）| 🟡 高 |
+| `components/canvasPointerGestureModel.ts`（手势真值表）| 87 | ❌ 无 | 🔴 高 |
+| `components/useMarqueeSelection.ts`（框选）| 123 | ✅ 有（react-flow selection）| 🟢 低 |
+| `components/useDragToConnect.ts`（拖拽连线）| 134 | ✅ 有 | 🟢 低 |
+| `components/useCanvasViewportGestures.ts`（视口手势）| 448 | ⚠️ 部分 | 🟡 高 |
+| `components/useCanvasTransformStoreSync.ts` | 57 | ❌ 无（自研变换同步）| 🟡 中 |
+| `components/useCanvasSelectionDrag.ts` | — | ⚠️ 部分 | 🟡 中 |
+| `components/useCanvasGroupActions.ts` | — | ⚠️ 部分 | 🟡 中 |
+| `components/CanvasMinimap.tsx` | 161 | ✅ 有（MiniMap）| 🟢 低 |
 
 ### 4. 性能/LOD 系统（自研，react-flow 覆盖不全）
 - `lightweight` / `visibleNodeIds`（只渲染可见边）+ `canvasNodeLevelOfDetail.ts`（LOD 分级）——**自研**，react-flow 的 `onlyRenderVisibleElements` 有但粒度不同。迁移 = 重做性能策略。🔴 高。
 
-### 5. scene3d（**用户指正修正**：3D 内核不依赖画布 2D，非最大阻碍）
-- `nodes/scene3d/` **107 个文件** + **27 个测试**，其中 **38 个文件用 `@react-three` / `three`**（3D 渲染内核）。
-- **关键修正**：scene3d 的 3D 内核（R3F/three）是**独立全屏视图**（`Scene3DFullscreen`），**不画在画布 2D SVG/自研管线里**。画布上只是它的**节点卡片预览**——`BaseGenerationNode.tsx:543` `node.kind==='scene3d'` 时渲染 `<Scene3DEditor>`（深模块 body）。
-- **因此换 react-flow 对 scene3d 的影响比预想小**：3D 内核（R3F/three）不依赖画布 2D 渲染，只要深模块外壳（BaseGenerationNode）迁到 react-flow，scene3d body 作为自定义节点内容基本保留，仅挂载/尺寸/坐标换算微调。🟡 中（非最大阻碍）。
-- ⚠️ 仍需真机验证：scene3d 全屏编辑器与画布的联动（如全屏→回画布卡片、截图回填）是否依赖画布 2D 坐标，需 POC 确认。
+### 5. scene3d（**用户指正修正**：3D 内核不依赖画布 2D 坐标，非最大阻碍）
+- `nodes/scene3d/` **107 个文件** + **27 个测试**，其中 **38+ 个文件用 `@react-three` / `three`**（3D 渲染内核，实测命中 >38 处）。
+- **关键修正（2026-08-12 审计核实）**：
+  - `BaseGenerationNode.tsx:543` 渲染 `<Scene3DEditor node width height readOnly>`（✅ 行号准）。但 **`Scene3DEditor` 不是"只是预览"**——它**本身内嵌真实 R3F 渲染的 `scene3d/scene3dSceneView.tsx`（`:2-3` 用 `@react-three/fiber` 的 `useThree`）**。`Scene3DFullscreen`（`:415-421` 经"进入编辑器"按钮懒加载）是**放大版编辑器**，不是 3D 渲染的唯一载体。
+  - scene3d **不依赖画布 2D 的 SVG/DOM 坐标变换**：它读的是 `node.position.x/y`（store 数据，`Scene3DEditor.tsx:229-231`），非 `getBoundingClientRect`/画布 viewport 换算。
+  - scene3d **深度依赖 store 数据层**：`Scene3DEditor.tsx:129-133` 直接 `import { useGenerationCanvasStore }` 并调用 `updateNode`/`connectNodes`/`addNode`/`nodes`/`edges`。这是换引擎时**保留**的部分，所以"换 react-flow 影响小"成立——真正原因是"只吃 store 数据、不吃画布 2D 渲染坐标"，而非"3D 内核独立"。
+- **因此换 react-flow 对 scene3d 的影响比预想小**：3D 内核（R3F/three）不依赖画布 2D 渲染坐标，只要深模块外壳（BaseGenerationNode）迁到 react-flow，scene3d body 作为自定义节点内容基本保留，仅挂载/尺寸微调。🟡 中（非最大阻碍）。
+- **联动已验证解耦（2026-08-12 审计）**：全屏↔卡片联动走 `Scene3DEditor.tsx:422-425` 的 `onScreenshot`/`onStateChange` 回调，**不依赖画布 2D 坐标**，无需 POC 即可判定"非最大阻碍"。
 
 ### 6. whiteboard（leafer 引擎，独立但耦合）
-- `nodes/whiteboard/` 20 文件（leafer Canvas）。它作为画布节点存在，换 react-flow 后要么保持 leafer（作为自定义节点嵌入）、要么重写。🟡 中-高。
+- `nodes/whiteboard/` **20 文件**（实测目录总数 20，其中仅 3 个含 leafer import：`WhiteboardLeaferCanvas.tsx` 等，其余 17 个是 React UI 外壳）。它作为画布节点存在，深度依赖 store：`WhiteboardCardBody.tsx:6` `useGenerationCanvasStore`、`WhiteboardModal.tsx:82-87` `addNode`/`updateNode`/`connectNodes`。
+- 换 react-flow 后：只要保留 store，leafer 作为自定义节点嵌入即可，耦合比"中-高"更低（≈中）——嵌入适配仍需做，但 store 数据面零改动。🟡 中。
 
-### 7. store 状态机（6064 行自研 zustand）
-- `store/`：`generationCanvasStore.ts` + `canvasGraphActions.ts` + `canvasNodeActions.ts` + `canvasRunActions.ts` + `canvasClipboard.ts` + `canvasGuards.ts` 等。
+### 7. store 状态机（store + model 共 6064 行自研 zustand）
+> 口径修正（2026-08-12 审计）：6064 行是 **store(3469) + model(2595) 合计**，非 store 单独。
+
+- `store/`：`generationCanvasStore.ts` + `canvasGraphActions.ts` + `canvasNodeActions.ts` + `canvasRunActions.ts` + `canvasClipboard.ts` + `canvasGuards.ts` 等（3469 行）。
+- `model/`：`graphOps.ts` / `generationCanvasSchema.ts` / `groupInputLinks.ts` / `shotNumbering.ts` 等（2595 行）。
 - react-flow 用 `useNodesState/useEdgesState`，Nomi 是**自研状态机**。换引擎 = **要么把 6064 行状态逻辑适配到 react-flow 的 nodes/edges 结构，要么让 react-flow 接 Nomi store**（后者更可能，但 react-flow 内部有自己的状态，双份状态同步是坑）。🔴 极高。
 
 ---
@@ -99,14 +109,14 @@
 | 2. 节点渲染迁移（BaseGenerationNode + 16 kind body）| 3-5 天 | 深模块组织进 react-flow nodeTypes，懒加载改造 |
 | 3. 边迁移（CanvasEdgeLayer → react-flow Edge）| 1-2 天 | 贝塞尔路径/命中/标签平移 |
 | 4. 交互迁移（手势/框选/拖拽/缩放/磁性 Handle）| 3-5 天 | 自研仲裁 hook 全部适配 react-flow 事件模型 |
-| 5. store 状态机适配（6064 行）| 3-5 天 | 最关键，双份状态同步风险 |
+| 5. store 状态机适配（store+model 6064 行）| **1-2 周** | 最关键，双份状态同步风险 🔴 极高；6064 行状态逻辑 + 单向数据流桥，3-5 天严重低估（2026-08-12 审计修正）|
 | 6. 性能/LOD 重做 | 2-3 天 | lightweight/visibleNodeIds 迁移 |
-| 7. scene3d 适配 | **1-2 天** | 3D 内核（R3F/three）独立于画布 2D，深模块 body 基本保留，仅挂载/联动微调（用户指正，非最大阻碍）|
-| 8. whiteboard 适配 | 1-2 天 | leafer 节点嵌入 react-flow |
+| 7. scene3d 适配 | **1-2 天** | 3D 内核（R3F/three）不依赖画布 2D 坐标，只吃 store 数据层（已验证），深模块 body 基本保留，仅挂载/联动微调（用户指正，非最大阻碍）|
+| 8. whiteboard 适配 | 1-2 天 | leafer 节点嵌入 react-flow（store 保留，耦合≈中）|
 | 9. 测试迁移/回归（136 测试）| 2-3 天 | 大量画布测试重写 |
-| **合计** | **约 17-30 天（≈3-6 周）** | 高风险 |
+| **合计** | **约 22-40 天（≈4-8 周）** | 高风险 |
 
-> 注：估算基于「单人不间断」的乐观值；含联调/走查/修回归，实际接近 **1-1.5 个月**。比此前"2-3 周"更准。
+> 注：估算基于「单人不间断」的乐观值；含联调/走查/修回归，实际接近 **1.5-2 个月**。比此前"2-3 周"更准。阶段 5 已按真实风险上调（2026-08-12 审计）。
 
 ---
 
@@ -140,57 +150,49 @@
 | 能力 | Nomi 自研 | react-flow | 备注 |
 |---|---|---|---|
 | 磁吸吸附 | ✅（磁性 Handle）| ✅（`connectionRadius`）| 都有 |
-| Handle 跟随鼠标 | ✅ | ❌ | Nomi 独有 |
+| Handle 跟随鼠标 | ✅（自研 `NodeConnectionHandles.tsx:16-24` 磁性跟随指针）| ⚠️ 需自研（react-flow 默认 Handle 不跟随，但可自定义 Handle 实现）| Nomi 已实现，react-flow 需移植 |
 | 深模块（16 kind 共用外壳）| ✅ | ⚠️ nodeTypes 可做 | Nomi 已做成 |
 | LOD/虚拟化/大画布性能 | ✅（精调）| ⚠️ 基础 | Nomi 更细 |
 | scene3d 集成 | ✅（深度）| ❌ | 3D 内核独立，换引擎不丢但需适配 |
 | 视觉手感（comet/Handle 放大）| ❌（无）| ⚠️ 需写 | 两者都要写，自研 2-3 天可加 |
 | 社区/维护 | ❌（自研）| ✅ | react-flow 生态 |
 
-### 4.3 三条可选路径（成本/收益/风险）
+### 4.3 四条可选路径（成本/收益/风险）
 | 路径 | 成本 | 收益 | 风险 | 适用 |
 |---|---|---|---|---|
 | **A. 不换，平移 comet+Handle** | 2-3 天 | 拿到 1mao 手感 | 低 | 只要手感 |
 | **B. 换引擎（走对外端点）** | 2-4 周 | 渲染层社区维护 + 1mao 全效果 | 中高（数据流桥/深模块）| 要彻底换 + 省渲染层维护 |
 | **C. 换引擎（全换）** | 3-6 周 | 同上 | 高 | 极少，不推荐 |
+| **D. 折中（A + 对外端点抽象）** | 2-3 天 + 持续 | A 的手感 + 把「store↔渲染层」边界显式化，为未来可选换引擎留口 | 低 | 要手感且不想锁死架构 |
 
 ### 4.4 我的判断（给判断，但最终你定）
 **如果「不喜欢」主要是手感/视觉 → A**：2-3 天，成本最低，大概率解决。
 **如果「不喜欢」+ 「要省渲染层维护」→ B**：2-4 周走对外端点，先做数据流桥 POC（0.5-1 天出结论）再铺开。
 
-> 无论 A/B，都**不推荐 C（全换）**。且 B 需先 POC 验证「store↔react-flow 单向数据流桥」，POC 不过即停——否则换完更不省心。
+> 无论 A/B/D，都**不推荐 C（全换）**。B 需先 POC 验证「store↔react-flow 单向数据流桥」，POC 不过即停——否则换完更不省心。
 
 ---
 
 ## 五、不做项 / 边界
 
 - **不实施**：本 doc 是选型对比，不触发任何代码改动。
-- **待用户拍板**（综合 A/B/C/D）：
+- **不推荐换引擎（C 全换）**：除非用户明确"要彻底对齐 1mao + 接受 1.5-2 月重构"。
+- **待用户拍板**（综合 A/B/C/D，见 §4.3）：
   - **A**：不换，走平移方案（comet + Handle，2-3 天）。
   - **B**：换引擎（走对外端点：保留 store + 只换渲染层，2-4 周），先做「store↔react-flow 数据流桥」POC（0.5-1 天出结论），POC 绿再铺开。
   - **C**：全换（3-6 周），不推荐。
-  - **D**：折中——先补 comet+Handle 手感（A），同时把「store↔渲染层」边界显式化（为未来可选换引擎留口）。
-
----
-
-## 五、不做项 / 边界
-
-- **不实施**：本 doc 是选型评估，不触发任何代码改动。
-- **不推荐换引擎**：除非用户明确"要彻底对齐 1mao + 接受 1-1.5 月重构"。
-- **待用户拍板**：
-  - **A**：不换，走平移方案（comet + Handle，2-3 天）。
-  - **B**：认真评估换引擎（走对外端点：保留 store + 只换渲染层），先做「store↔react-flow 数据流桥」POC（0.5-1 天出结论）。
-  - **C**：暂不动画布，先议「整体设计重做」。
-  - **D**：只补 comet + Handle 手感（A），同时启动「对外端点」抽象（把渲染层与 store 的边界显式化，为未来可选换引擎留口）——折中最稳。
+  - **D**：折中最稳——先补 comet + Handle 手感（A，2-3 天），同时启动「对外端点」抽象（把渲染层与 store 的边界显式化，为未来可选换引擎留口）。
 
 ---
 
 ## 六、待审计清单（审计对照用）
 
-- [ ] 画布 494 文件 / 136 测试 / store+model 6064 行 —— 是否属实（可 `find`/`wc` 复核）
-- [ ] **store 渲染无关（对外端点）**：`generationCanvasStore.ts` 无 DOM/SVG import（:1-29），`GenerationCanvasState` 含纯数据 actions（`canvasStoreTypes.ts:48-134`），`CanvasEdgeLayer.tsx` 只 import store 类型 —— 是否属实（用户提问触发）
-- [ ] scene3d：38 文件用 `@react-three`/`three`，3D 内核独立于画布 2D（`BaseGenerationNode.tsx:543` 作为深模块 body 挂载）—— 用户指正，是否属实
-- [ ] React Flow 有 `connectionRadius` 磁吸 —— 官方文档可查
-- [ ] Nomi 有暗色模式（`colorScheme.ts`）—— 我此前误判已修正
-- [ ] 工作量约 3-6 周 / 9 阶段 —— 是否合理（按阶段逐条复核迁移面）
-- [ ] 「双份状态同步」风险（Nomi store vs react-flow 内部状态）—— 是否成立
+- [x] 画布 494 文件 / 136 测试 / store+model 6064 行 —— **属实**（2026-08-12 `find`+`wc` 复核；store 3469 / model 2595）
+- [x] **store 渲染无关（对外端点）**：`generationCanvasStore.ts` 无 DOM/SVG import（:1-29），`GenerationCanvasState` 含纯数据 actions（`canvasStoreTypes.ts:44-134`），`CanvasEdgeLayer.tsx` 只 import store 类型 —— **属实**
+- [x] scene3d：38+ 文件用 `@react-three`/`three`；`BaseGenerationNode.tsx:543` 渲染 `<Scene3DEditor>`（深模块 body）—— **属实，但修正表述**：3D 渲染不仅在全屏（`Scene3DEditor` 卡片内即内嵌 `scene3dSceneView.tsx` R3F）；真正耦合点是 store 数据层（`Scene3DEditor.tsx:129-133`），非画布 2D 坐标；联动 `onScreenshot`/`onStateChange` 回调解耦已验证
+- [x] React Flow 有 `connectionRadius` 磁吸 —— 官方文档可查，**属实**
+- [x] Nomi 有暗色模式（`colorScheme.ts`）—— 我此前误判已修正，**属实**
+- [x] 工作量：阶段 5（store 适配）由 3-5 天上调至 1-2 周，合计 17-30 天 → **22-40 天（≈4-8 周）**（2026-08-12 审计修正，与「🔴 极高」风险匹配）
+- [x] 「双份状态同步」风险（Nomi store vs react-flow 内部状态）—— **成立**
+- [x] 交互 hook 实际路径为 `components/`（非 `hooks/`）、`Handle 跟随鼠标` react-flow 非绝对不能（需自定义 Handle）—— 2026-08-12 审计修正
+- [x] 重复「五、不做项」小节已合并；D 路径纳入 §4.3 编号 —— 2026-08-12 审计修正
