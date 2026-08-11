@@ -43,10 +43,10 @@
 
 ## 四、改代码流程
 
-1. **先定位**：改哪面查哪面（见下方场景速查/文档导航），读现有代码确认现状，不脑补。**动手前先读对应文档**：架构分层 `docs/05-架构三层探索.md`、事件/状态 `docs/06-事件总线设计.md`、节点组件 `docs/07-节点组件契约表.md`、后端依赖 `docs/后端模块依赖图与循环依赖风险.md`、供应商接入 `docs/04-第三方API接入机制探索.md`、带图链路 `docs/09-带图聊天链路排查.md`；快速入口见 `docs/README.md` 的「开发者改代码」表。
-2. **改**：按「写代码规范」精准修改；electron 主进程改码要过 `pnpm build`（tsc）。
-3. **冒烟**：改业务逻辑 → `pnpm run test`（vitest 快速回包）；UI/交互 → `pnpm run test:e2e` + 真实走查截图人眼判断（P3 全绿≠完成）。
-4. **全门**：`pnpm run gates` 全过（filesize/tokens/i18n/lint/typecheck/test/build）才可 commit。
+1. **先定位（改码第一站）**：改哪面查哪面，读现有代码确认现状，不脑补。**遇到"这是啥 / 在哪 / 被谁引用"的疑问，先跑 `pnpm run ask -- symbol|contract|file <关键词>` 一条命令即答**（靠查不靠猜，省 context）。**动手前先读对应文档**：架构分层 `docs/05-架构三层探索.md`、事件/状态 `docs/06-事件总线设计.md`、节点组件 `docs/07-节点组件契约表.md`、后端依赖 `docs/后端模块依赖图与循环依赖风险.md`、供应商接入 `docs/04-第三方API接入机制探索.md`、带图链路 `docs/09-带图聊天链路排查.md`；快速入口见 `docs/README.md` 的「开发者改代码」表。
+2. **改**：按「写代码规范」精准修改；electron 主进程改码要过 `pnpm build`（tsc）；**改 IPC channel 相关要过 `check:ipc`（channel 必须走 `ipcChannels.ts` 常量，禁裸字符串）**；改桥/窗口直读相关要过 `check:bridge`。
+3. **冒烟**：改业务逻辑 → `pnpm run test`（vitest 快速回包）；UI/交互 → `pnpm run test:e2e` + 真实走查截图人眼判断（P3 全绿≠完成）；改契约/channel 相关 → `pnpm run check:ipc`。
+4. **全门**：`pnpm run gates` 全过（filesize/tokens/i18n/bridge/ipc/lint/typecheck/test/build）才可 commit。
 5. **提交**：最小差异提交，便于 `git reset --hard HEAD~1` 回退；多步改动拆单文件独立 commit。
 
 > 改/扩现有 UI 先看它真实样子（读完整外壳组件或真实截图，样张是真实布局+改动、不是脑补）；碰三方库/模型先查官方文档，禁凭记忆。
