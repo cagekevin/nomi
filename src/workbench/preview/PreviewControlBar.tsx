@@ -91,7 +91,7 @@ export type PreviewControlBarProps = {
   onScaleDelta: (delta: number) => void
   onResetFraming: () => void
   /** 文字叠加。 */
-  textMenuRef: React.RefObject<HTMLDivElement>
+  textMenuRef: React.RefObject<HTMLDivElement | null>
   textMenuOpen: boolean
   onTextMenuOpenChange: (open: boolean) => void
   onAddText: (style: 'caption' | 'title') => void

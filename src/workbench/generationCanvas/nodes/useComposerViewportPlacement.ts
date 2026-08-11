@@ -18,7 +18,7 @@ export function toolbarClearanceInCanvasUnits(screenHeight: number, zoom: number
 }
 
 type Placement = {
-  anchorRef: React.RefObject<HTMLDivElement>
+  anchorRef: React.RefObject<HTMLDivElement | null>
   canvasZoom: number
   flipUp: boolean
   aboveClearance: number

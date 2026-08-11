@@ -70,7 +70,7 @@ export type AssistantTimelineProps = {
   onContentDismiss?: () => void
   /** 错误卡「重试」= 重发上一条用户消息(undefined 则不显重试按钮)。 */
   onRetry?: () => void
-  threadBottomRef: React.RefObject<HTMLDivElement>
+  threadBottomRef: React.RefObject<HTMLDivElement | null>
 }
 
 export default function AssistantTimeline(props: AssistantTimelineProps): JSX.Element {

@@ -300,7 +300,7 @@ function PanoramaCaptureOverlay({
   captureRatio,
   frameSize,
 }: {
-  captureFrameRef: React.RefObject<HTMLDivElement>
+  captureFrameRef: React.RefObject<HTMLDivElement | null>
   captureRatio: PanoramaCaptureRatio
   frameSize: { width: number; height: number } | null
 }): JSX.Element {
@@ -337,7 +337,7 @@ function PanoramaDialogControls({
   onClose,
   onScreenshot,
 }: {
-  captureFrameRef: React.RefObject<HTMLDivElement>
+  captureFrameRef: React.RefObject<HTMLDivElement | null>
   captureRatioId: PanoramaCaptureRatioId
   onCaptureRatioChange: (ratioId: PanoramaCaptureRatioId) => void
   onClose: () => void

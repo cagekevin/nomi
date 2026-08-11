@@ -25,7 +25,7 @@ type Viewport = { zoom: number; offset: Offset }
 
 type UseCanvasViewportGesturesArgs = {
   readOnly: boolean
-  stageRef: React.RefObject<HTMLDivElement>
+  stageRef: React.RefObject<HTMLDivElement | null>
   offsetRef: React.MutableRefObject<Offset>
   zoomRef: React.MutableRefObject<number>
   setViewport: React.Dispatch<React.SetStateAction<Viewport>>

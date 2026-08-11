@@ -97,3 +97,32 @@
 2. **再铺开换渲染层**（migration-assessment 阶段 1-9）：react-flow 已装 12.11.2 配 React 19 完全兼容。
 
 > 理由：换渲染层动的是 GenerationCanvas + 交互 hook，React 升级动的是地基 + R3F。分开做，任一红了能单独定位。先地基后渲染层，避免两套改动叠加。
+
+---
+
+## 七、执行结果（2026-08-12，已实测全绿）
+
+**Phase 1 + 2 已完成，全门通过。**
+
+### 升级内容
+| 包 | 变更 |
+|---|---|
+| `react` / `react-dom` | 18.3.1 → **19.2.8** |
+| `@types/react` / `@types/react-dom` | 18.3 → **19.2.x** |
+| `@react-three/fiber` | 8.18.0 → **9.7.0**（核心阻塞，锁 React<19 已解）|
+| `@react-three/drei` | 9.122.0 → **10.7.8** |
+| `three` | 0.184.0 保持（fiber v9 要求 >=0.156，满足）|
+
+### 代码适配（React 19 破坏点）
+1. **全局 JSX 命名空间移除**（React 19 破坏点）：新增 `src/types/react19-jsx.d.ts`，把全局 `JSX` 指向 `react` 导出的 `JSX`。解决 **455 处**裸 `JSX.Element` 返回类型（逐文件改不现实，一次声明全局恢复）。
+2. **useRef 类型签名变化**（React 19：`useRef<T>(null)` 返回 `RefObject<T | null>`）：**14 处**把 `React.RefObject<T>` 放宽为 `React.RefObject<T | null>`（stageRef/anchorRef/inputRef/captureFrameRef 等）。
+
+### 验证结果
+- ✅ `pnpm run typecheck`：0 错误（React 19 类型层全适配）
+- ✅ `pnpm run test`：**4111 passed / 1 skipped**（无回归）
+- ✅ `pnpm run lint:ci`：0 errors / 97 warnings（<98 棘轮，无新增）
+- ✅ `pnpm run build`：vite + electron tsc 全通过
+
+### 剩余
+- **Phase 3**：framer-motion/mantine 验证（peer 已含 ^19，大概率零改动，已随全量测试隐含通过）
+- **Phase 4**：运行时警告清理 + 真机走查（需真实启动 app 看 R3F 3D 场景渲染）

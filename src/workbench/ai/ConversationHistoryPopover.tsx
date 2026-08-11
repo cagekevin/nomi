@@ -12,7 +12,7 @@ export function ConversationHistoryPopover({
   onClose,
   children,
 }: {
-  anchorRef: React.RefObject<HTMLElement>
+  anchorRef: React.RefObject<HTMLElement | null>
   onClose: () => void
   children: React.ReactNode
 }): JSX.Element {

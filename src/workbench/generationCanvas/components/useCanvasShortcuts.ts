@@ -54,7 +54,7 @@ export function canvasZoomShortcutDirection(input: CanvasZoomShortcutInput): -1 
  */
 export function useCanvasShortcuts(opts: {
   readOnly: boolean
-  stageRef: React.RefObject<HTMLDivElement>
+  stageRef: React.RefObject<HTMLDivElement | null>
   selectedNodeCount: number
   selectedGroupCount: number
   activeCategoryId: string

@@ -10,7 +10,7 @@ type Offset = { x: number; y: number }
 export type MarqueeRect = { left: number; top: number; width: number; height: number }
 
 type UseMarqueeSelectionArgs = {
-  stageRef: React.RefObject<HTMLDivElement>
+  stageRef: React.RefObject<HTMLDivElement | null>
   offsetRef: React.MutableRefObject<Offset>
   zoomRef: React.MutableRefObject<number>
   activeCategoryId: string

@@ -13,7 +13,7 @@ type Offset = { x: number; y: number }
 
 type Args = {
   readOnly: boolean
-  stageRef: React.RefObject<HTMLDivElement>
+  stageRef: React.RefObject<HTMLDivElement | null>
   offsetRef: React.MutableRefObject<Offset>
   zoomRef: React.MutableRefObject<number>
   setViewport: React.Dispatch<React.SetStateAction<{ zoom: number; offset: Offset }>>
