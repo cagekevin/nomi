@@ -15,6 +15,7 @@
 | 命令 | 用途 |
 |---|---|
 | `pnpm dev` | 开发模式启动（Vite + Electron） |
+| `pnpm run ask -- symbol\|contract\|file <关键词>` | **【改码第一站】** AI 检索总入口：查符号定义+引用 / IPC 契约引用面 / 相关文件，一条命令即答 |
 | `pnpm build` | Vite 构建 + electron tsc |
 | `pnpm run test` | Vitest 单测（改完冒烟，快速回包） |
 | `pnpm run test:e2e` | Playwright smoke（零额度，CI-ready） |
@@ -23,6 +24,8 @@
 | `pnpm run check:filesize` | 巨壳文件门岗 |
 | `pnpm run check:tokens` | 设计 token 门岗（禁任意 px 字号/圆角、hex 色、默认色板；棘轮只减不增）|
 | `pnpm run check:i18n` | 可见文字国际化门岗（禁止新增硬编码 UI 文案；遗留基线只减不增）|
+| `pnpm run check:bridge` | 桥访问门岗（堵 src/ 下 `window.nomiDesktop` 绕桥直读）|
+| `pnpm run check:ipc` | IPC 契约门岗（channel 必须走 `ipcChannels.ts` 常量，禁裸字符串/重复/格式非法）|
 | `pnpm run check:audit` | 审计节奏提醒（≥25 commit 提示） |
 | `npx skills experimental_install` | 从 `skills-lock.json` 还原 `.Codex/skills/`（换机/协作者用） |
 
