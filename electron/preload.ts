@@ -28,6 +28,10 @@ const settingsImpl = {
     reset: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationReset),
     reveal: () => ipcRenderer.invoke(SettingsBridgeChannels.projectLocationReveal),
   },
+  automationPolicy: {
+    get: () => ipcRenderer.invoke(SettingsBridgeChannels.automationPolicyGet),
+    set: (payload: unknown) => ipcRenderer.invoke(SettingsBridgeChannels.automationPolicySet, payload),
+  },
 } satisfies SettingsBridgeContract;
 
 contextBridge.exposeInMainWorld("nomiDesktop", {
@@ -105,13 +109,7 @@ contextBridge.exposeInMainWorld("nomiDesktop", {
       return () => productionDeepLinkListeners.delete(cb);
     },
   },
-  settings: {
-    projectLocation: settingsImpl.projectLocation,
-    automationPolicy: {
-      get: () => ipcRenderer.invoke(IpcChannels.settingsAutomationPolicyGet),
-      set: (payload: unknown) => ipcRenderer.invoke(IpcChannels.settingsAutomationPolicySet, payload),
-    },
-  },
+  settings: settingsImpl,
   browserChromeMenu: {
     select: (id: unknown) => ipcRenderer.send(IpcChannels.browserChromeMenuSelect, id),
     cancel: () => ipcRenderer.send(IpcChannels.browserChromeMenuCancel),

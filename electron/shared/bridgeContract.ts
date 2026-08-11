@@ -14,6 +14,7 @@
  */
 import type { IpcChannel } from "./ipcChannels";
 import { IpcChannels } from "./ipcChannels";
+import type { AutomationPolicySettings } from "../settings/automationPolicyContract";
 
 /** 项目库位置（settings.projectLocation）域契约。 */
 export type ProjectLocationResult =
@@ -28,6 +29,11 @@ export type SettingsBridgeContract = {
     reset: () => Promise<ProjectLocationResult>
     reveal: () => Promise<ProjectLocationResult>
   }
+  /** 自动化策略（任务中心 gate 用）。payload 类型来自 automationPolicyContract（纯类型 import，无运行时依赖）。 */
+  automationPolicy: {
+    get: () => Promise<AutomationPolicySettings>
+    set: (payload: AutomationPolicySettings) => Promise<AutomationPolicySettings>
+  }
 }
 
 /** 本域真实走的 IPC channel（单一真相，供 preload 实现引用；不改业务 channel 名）。 */
@@ -36,4 +42,6 @@ export const SettingsBridgeChannels: Record<string, IpcChannel> = {
   projectLocationPick: IpcChannels.settingsProjectLocationPick,
   projectLocationReset: IpcChannels.settingsProjectLocationReset,
   projectLocationReveal: IpcChannels.settingsProjectLocationReveal,
+  automationPolicyGet: IpcChannels.settingsAutomationPolicyGet,
+  automationPolicySet: IpcChannels.settingsAutomationPolicySet,
 } as const;
