@@ -76,6 +76,12 @@
 
 **并行纪律（常 20+ worktree 同时改 main）**：① 动任何 git 第一步 `git branch --show-current`，别假设自己在 main（栽过：落错分支）；② 落 main 别在共享树上 commit/切分支/reset——开独立 sibling worktree 钉 `origin/main`（`git worktree add --detach ../Nomi-x origin/main` → cherry-pick 改动 → `ln -s` 复用主仓 node_modules 跑 `pnpm run gates` → `git push origin HEAD:main` → `git worktree remove`），五门只评自己干净基线；③ e2e/window 桥等 hook 放低争用子系统文件，别放 store 根/热门入口。详见记忆 `parallel-session-on-main-hazard`。
 
+**网络/代理约束（2026-08-11 实测）**：本机**不能直连 github**（`curl https://github.com` 返回 000 / push 报 HTTP2 framing / 443 连接失败）。**push / clone / 访问外网必须走本地代理 `127.0.0.1:7897`**（Clash 类默认端口）。命令形式：
+```bash
+HTTPS_PROXY=http://127.0.0.1:7897 HTTP_PROXY=http://127.0.0.1:7897 git push origin main
+```
+**用临时环境变量，不改 git config**（Git Safety Protocol：不持久化改配置）。代理可连性测试：`curl -m 8 -x http://127.0.0.1:7897 -o /dev/null -w "%{http_code}" https://github.com`（200=可用）。
+
 ---
 
 ## 场景速查
