@@ -47,7 +47,7 @@
 2. **改**：按「写代码规范」精准修改；electron 主进程改码要过 `pnpm build`（tsc）；**改 IPC channel 相关要过 `check:ipc`（channel 必须走 `ipcChannels.ts` 常量，禁裸字符串）**；改桥/窗口直读相关要过 `check:bridge`。
 3. **冒烟**：改业务逻辑 → `pnpm run test`（vitest 快速回包）；UI/交互 → `pnpm run test:e2e` + 真实走查截图人眼判断（P3 全绿≠完成）；改契约/channel 相关 → `pnpm run check:ipc`。
 4. **全门**：`pnpm run gates` 全过（filesize/tokens/i18n/bridge/ipc/lint/typecheck/test/build）才可 commit。
-5. **提交**：最小差异提交，便于 `git reset --hard HEAD~1` 回退；多步改动拆单文件独立 commit。
+5. **提交**：最小差异提交，便于 `git reset --hard HEAD~1` 回退；多步改动拆单文件独立 commit。**commit message 用前缀规范**：`feat:`（新功能）/ `fix:`（修 bug）/ `refactor:`（重构不改行为）/ `docs:`（文档）/ `chore:`（工具/门岗/杂项）。**重大/反直觉改动立即注释原因**（借鉴 1mao：每写一处反直觉代码注释"语义 + 为什么"，后续 AI 重读不困惑，不设 deadline）。
 
 > 改/扩现有 UI 先看它真实样子（读完整外壳组件或真实截图，样张是真实布局+改动、不是脑补）；碰三方库/模型先查官方文档，禁凭记忆。
 
