@@ -115,12 +115,21 @@ export type DesktopBridge = DesktopMediaBridge & {
 - ROI：**中高**——立即补上改造 A 的唯一漏网，channel 改名全链报错覆盖到 browser 域。纯机械替换，无行为变化，4104 测试兜底。
 - 附带：`browserChromeMenu`（preload 顶层散块）也应并入 `browser` 域或独立进常量。
 
-### 方案 B：契约单一来源（根治 F1，核心）
+### 方案 B：契约单一来源（根治 F1，核心）—— ✅ POC 通过（2026-08-11）
 **做法**：在 `electron/shared/` 建一份**能力契约**（每个 channel 的 request/response 类型 + 暴露方法签名），`preload.ts` 用 `satisfies` 约束暴露对象，`src/desktop/bridge.ts` 的 `DesktopBridge` 从契约 derive（或 `satisfies`）。让"实现与类型必须一致"由编译器保证。
-- 难度：**3**（触及 preload 575 行 + bridge 760 行，需先解决 tsconfig 隔离）
-- **前置**：`electron/shared/` 新契约层**不能 import src 侧**，`bridge.ts` 改 import 该共享层（同时解掉 F3 的"前端依赖后端路径"问题）。
-- ROI：**高**——根治 F1/F3，"加功能"从"同步 4-5 处 + 靠人肉"降到"改契约 1 处 + 前端消费 1 处，编译器全链兜底"。
-- 风险：改动大，需分批按域迁移，靠 4104 测试 + 每域独立 commit 兜底。
+
+**POC 完成记录（2026-08-11，`settings` 域，commit `95222c5` + `aefc7d5`）**：
+- 新增 `electron/shared/bridgeContract.ts`：`SettingsBridgeContract`（projectLocation 4 方法 + automationPolicy 2 方法）+ `SettingsBridgeChannels`（channel 常量）。
+- `electron/preload.ts`：`settingsImpl` 用 `satisfies SettingsBridgeContract` 约束（漏方法/签名不匹配编译即报）；expose 对象 `settings: settingsImpl` 复用。
+- `src/desktop/settingsBridge.ts`：`DesktopSettingsBridge = SettingsBridgeContract` 完全 derive，手写双份消除。
+- **tsconfig 互通验证**（审计最担心的点）：electron 侧（CommonJS）`satisfies` ✅ + src 侧（Bundler）`import` derive ✅，`pnpm run typecheck`/`test`(4104)/`build`/`lint` 全绿。契约放 `electron/shared/` 被两边引用是可行的。
+
+**铺开策略（2026-08-11 决策）——按需迁移，不为重构而重构**：
+- 机制已被 settings 域完整证明。**新增域一律用契约范式**（新功能必须走 `electron/shared/bridgeContract` + `satisfies` + derive）。
+- **存量域在"用到时"（加功能/改 bug 顺手）再迁移**，不一次全量铺开——避免动 770 行 bridge 的集中风险，也符合"如无必要勿增实体"。
+- 每个存量域迁移独立 commit，靠 4104 测试 + 五门兜底，坏一处可单独 revert。
+- 难度：**3**（机制已通，剩下是各域的类型归位 + payload 核对，按需推进）
+- ROI：**高**——"加功能"从"同步 4-5 处 + 靠人肉"降到"改契约 1 处 + 前端消费 1 处，编译器全链兜底"。
 
 ### 方案 C：收口前端残余直读 + 补门岗（收尾，低风险）
 **做法（审计 D1 重写）**：
@@ -201,4 +210,9 @@ export type DesktopBridge = DesktopMediaBridge & {
 
 **2026-08-11 已拍板**：按第四章最终决策执行 —— **Phase 1（A + C 前半）先做，Phase 2（B 契约化）先 POC 再铺，Phase 3（C 后半 + 门岗）收尾；方案 D 另立 plan，`knownVendors.test.ts` 值 import 标记后续。**
 
-下一步开工：直接进入 Phase 1（收编 `browser:*` 87 处 + 新建 `getPlatform()`/`isWindows()` 收口 7 处 platform 直读）。
+**执行进度（2026-08-11）**：
+- ✅ **Phase 1-A**（`9969214`）：`browser:*` 87 处裸字符串收编进 `ipcChannels.ts`，全仓 browser 字符串只剩常量定义。已验证：常量值逐字一致、preload↔主进程方向 100% 配对、smoke E2E 14 断言全过。
+- ✅ **Phase 1-B**（`ffafad9`）：`bridge.ts` 新建 `getPlatform()`/`isWindows()`，7 处 UI platform 直读收口，`src/` 下 `nomiDesktop?.platform` 清零。
+- ✅ **Phase 2 POC**（`95222c5` + `aefc7d5`）：settings 域完整契约化，tsconfig 互通验证通过。**铺开策略定为"按需迁移"**（新增域用契约范式，存量域用到时再迁），见方案 B。
+- ⏸ **Phase 3**（C 后半窗口散读收口 + 门岗脚本）未做，留待后续。
+- 全程 `typecheck`/`test`(4104)/`build`/`lint`(97)/`filesize`/`tokens`/`i18n` 全绿，已 push 至 origin/main。
