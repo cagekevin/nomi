@@ -1,4 +1,5 @@
 import { logger } from './logger'
+import { getDesktopBridge } from '../desktop/bridge'
 
 type StartupMark = {
   label: string
@@ -49,6 +50,5 @@ export async function timeStartupStepAsync<T>(label: string, work: () => Promise
 }
 
 export function markStartupProbe(label: string, payload?: Record<string, unknown>): void {
-  const bridge = typeof window !== 'undefined' ? window.nomiDesktop : undefined
-  bridge?.startupProbe?.mark(label, payload)
+  getDesktopBridge()?.startupProbe?.mark(label, payload)
 }

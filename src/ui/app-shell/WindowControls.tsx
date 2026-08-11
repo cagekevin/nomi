@@ -2,7 +2,7 @@ import React from "react";
 import { IconMinus, IconSquare, IconX } from "@tabler/icons-react";
 import { cn } from "../../utils/cn";
 import { useTranslation } from "react-i18next";
-import { isWindows as detectWindows } from "../../desktop/bridge";
+import { getDesktopBridge, isWindows as detectWindows } from "../../desktop/bridge";
 
 const isWindows = detectWindows();
 
@@ -15,7 +15,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
   const [maximized, setMaximized] = React.useState(false);
 
   React.useEffect(() => {
-    const off = window.nomiDesktop?.window?.onMaximized?.((v) => setMaximized(v));
+    const off = getDesktopBridge()?.window?.onMaximized?.((v) => setMaximized(v));
     return () => off?.();
   }, []);
 
@@ -34,7 +34,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
         type="button"
         className={btnBase}
         aria-label={t('window.minimize')}
-        onClick={() => window.nomiDesktop?.window?.minimize?.()}
+        onClick={() => getDesktopBridge()?.window?.minimize?.()}
       >
         <IconMinus size={12} stroke={1.8} />
       </button>
@@ -42,7 +42,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
         type="button"
         className={btnBase}
         aria-label={maximized ? t('window.restore') : t('window.maximize')}
-        onClick={() => window.nomiDesktop?.window?.maximize?.()}
+        onClick={() => getDesktopBridge()?.window?.maximize?.()}
       >
         <IconSquare size={12} stroke={1.8} />
       </button>
@@ -50,7 +50,7 @@ export function WindowControls({ className }: { className?: string }): JSX.Eleme
         type="button"
         className={cn(btnBase, "hover:!bg-[var(--workbench-danger)] hover:!text-white")}
         aria-label={t('window.close')}
-        onClick={() => window.nomiDesktop?.window?.close?.()}
+        onClick={() => getDesktopBridge()?.window?.close?.()}
       >
         <IconX size={12} stroke={1.8} />
       </button>

@@ -3,6 +3,7 @@ import {
   pasteClipboardMediaToGenerationCanvas,
   showClipboardMediaPasteNotes,
 } from '../adapters/clipboardImagePaste'
+import { getDesktopBridge } from '../../../desktop/bridge'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { showUndoToast } from '../../../utils/showUndoToast'
 import i18n from '../../../i18n'
@@ -211,7 +212,7 @@ export function useCanvasShortcuts(opts: {
         pasteNodes(pastePosition)
       })
     }
-    const offDesktopZoom = window.nomiDesktop?.window?.onCanvasZoomShortcut?.((direction) => {
+    const offDesktopZoom = getDesktopBridge()?.window?.onCanvasZoomShortcut?.((direction) => {
       if (!stageRef.current || stageRef.current.offsetParent === null) return
       zoomByStep(direction)
     })
