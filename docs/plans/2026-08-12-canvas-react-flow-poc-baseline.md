@@ -99,3 +99,37 @@ POC 验收必须保持此基线全绿（4104/4105），且 POC 只新增 demo，
 - [ ] 验证边 `mode` 业务语义在自定义 Edge 渲染层可读
 - [ ] `pnpm run typecheck` + `pnpm run test`（4104 全绿）通过
 - [ ] 产出「数据流桥是否成立」的明确结论 → 供用户拍板铺开 or 停
+
+---
+
+## 七、POC 执行结果（2026-08-12，已实测）
+
+**结论：数据流桥成立。换 react-flow 走对外端点的唯一结构风险已消除，可以铺开。**
+
+### 交付物（`src/devlab/reactFlowPoc/`，隔离实验区，不接入主画布路由）
+| 文件 | 作用 |
+|---|---|
+| `bridge.ts` | 数据流桥纯函数：store→react-flow 转换 + react-flow 事件→store 回写 |
+| `bridge.test.ts` | 桥逻辑单测（7 例） |
+| `ReactFlowCanvasPoc.tsx` | 渲染 demo（xyflow 渲染 store + 交互回写） |
+
+### 版本事实
+- 装 **@xyflow/react 12.11.2**（最新），peer `react >= 17`，**配项目现有 React 18.3.1 无冲突**（实测）
+- React 20 全项目升级 = 独立工作项（涉及 zustand/framer-motion/tiptap/R3F 等配套），**不阻塞本 POC**（桥与 React 版本无关）
+
+### 桥的核心策略（已验证）
+- **store 为唯一真相源**，react-flow 只渲染 + 派发事件
+- Nomi `GenerationCanvasNode` → react-flow `Node`：业务字段整包塞 `data.nomiNode`（不清空不拍平）
+- Nomi `GenerationCanvasEdge` 的 `mode/order` 语义（react-flow 无此概念）→ 旁路挂 `nomiEdge`，供自定义 Edge 渲染读取
+- 回写：position change → `store.moveNode`；remove → `store.deleteNode`；onConnect → `store.connectNodes`
+
+### 验收结果（7/7 桥测试 + 全门）
+- ✅ 桥单测 **7/7**（转换 + position/remove/connect 回写 + 双向闭环）
+- ✅ `pnpm run typecheck` 通过
+- ✅ `pnpm run test` **4111 passed / 1 skipped**（新增 7 测试，基线 4104 无回归）
+- ✅ `pnpm run lint:ci` **0 errors / 97 warnings**（< 98 棘轮，POC 文件零新增 warning）
+
+### 下一步（待用户拍板）
+1. **铺开换渲染层**（2-4 周）：按 `migration-assessment` 阶段 1-9 推进，先节点渲染迁移
+2. **React 20 全项目升级**：独立立项（动地基，1 周级高风险）
+3. 两者可并行：桥已证成立，换渲染层不依赖 React 20；React 20 升级也不依赖桥
