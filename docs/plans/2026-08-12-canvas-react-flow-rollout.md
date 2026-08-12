@@ -412,7 +412,8 @@
 
 ### 当前状态（截至 2026-08-12）
 - **S1 完成**（容器骨架 + 数据流桥 + 切换开关）。
-- **S2 基本完成**：STEP 1-4 + 内容层全部接入。ReactFlowNode 已接全 kind 分发（audio/text/image/video/panorama/scene3d/model3d/card）+ 浮条 4 处（图片/视频/结果下载/全景）+ 裁剪框/结果堆栈 + 失败态。剩 readOnly 透传（当前硬编码 false，S6 分享预览时处理）。
+- **S2 完成**：STEP 1-4 + 内容层全部接入。ReactFlowNode 已接全 kind 分发（audio/text/image/video/panorama/scene3d/model3d/card）+ 浮条 4 处（图片/视频/结果下载/全景）+ 裁剪框/结果堆栈 + 失败态。剩 readOnly 透传（当前硬编码 false，S6 分享预览时处理）。
+- **S3 完成**（边渲染 A2 + E3/E4）：自定义 `ReactFlowEdge`（`getBezierPath` + `BaseEdge` + `EdgeLabelRenderer`）+ 边 mode 标签门（选中节点才浮出）+ 模式菜单/断开回写 store + 边删除回写 `disconnectEdge`。桥 `toReactFlowEdge` 改为把 `nomiEdge` 整包进 `data.nomiEdge`（对齐节点 `data.nomiNode`）。
 - 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 保持 false（默认老画布）；迁移期开发态，不中途真机。
 
 ### 关键抉择记录（验收时判断"为什么这么做"的依据）
@@ -463,15 +464,25 @@
 | `074f959` | S2-STEP2 | image 内容层补全（ImageResultStackControls 堆栈 + ImageCropGridOverlay 裁剪，图片容器改内容驱动高度） |
 | `57b1ac8` | S2-STEP2 | 剩余 kind 接入（text→TextDocumentNode、scene3d→Scene3DEditor、model3d→Model3DViewer、card→NodeCardBody、失败态→NodeErrorReport） |
 | `803e7d6` | S2 | i18n 门岗清零（ReactFlowNode 占位文案改 i18n，13 literal 减到 0） |
+| `[S3]` | S3 | 自定义 Edge（ReactFlowEdge.tsx：getBezierPath+BaseEdge+EdgeLabelRenderer+模式菜单/断开/选中）+ edgeTypes 注册 + 桥 toReactFlowEdge 改 data.nomiEdge + applyEdgeChangesToStore + 测试同步 + lint 清理 |
 
 ### 进行中 / 下一步
-- **S2 内容层 + 浮条已全部接入**（commit 见上清单）。剩：
+- **S3 边渲染已接入**（commit 见上清单）。剩：
   1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
   2. **video 浮条**：已通过 `NodeResultDownloadButton`→`NodeVideoFrameToolbar` 链路生效（抽帧/按镜头拆 `NodeShotCutPanel`），无需额外。
   3. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer`（已接入）一起复用，不单独接。
-- **下一步 = S3 边渲染**：自定义 Edge（`BaseEdge` + `getBezierPath`）+ 边模式/断开/选中（E3/E4）。连线 Handle（S4）。
+- **下一步 = S4 交互迁移 + 手柄/组框重写**：A4-A8 + B1/B2/B5 + D1/D2/D4 + **F8/F9/F10**（拖/框选/连线/预览线 + 右键/放空菜单 + viewport 记忆 + 手柄迁 `Handle` / 组框"连到整组" / 出端口选择层重写）。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
 - **门岗**：i18n 已清零（`803e7d6`）；filesize 白名单 3 个（`BaseGenerationNode` 超限在白名单，迁移期不处理）；老画布 walk 迁移期可能红（D2 接受）。
+
+### 验收对照（S3 目标 vs 现状）
+- ✅ 自定义 Edge（`getBezierPath` + `BaseEdge` + `EdgeLabelRenderer`）
+- ✅ 边 mode 标签门：选中节点才浮出关联边类型标签（2026-08-08 拍板语义）
+- ✅ 边模式菜单（`availableEdgeModes`）→ `updateEdgeMode` 回写 store
+- ✅ 断开剪刀 → `disconnectEdge` 回写 store
+- ✅ 边选中态（react-flow `EdgeProps.selected`）+ 关联节点点亮
+- ✅ 边删除（onEdgesChange remove → `disconnectEdge`）
+- ✅ 桥 `toReactFlowEdge` 把 `nomiEdge` 整包进 `data.nomiEdge`（对齐节点 `data.nomiNode`）+ 测试同步
 
 ### 验收对照（S2 目标 vs 现状）
 - ✅ 容器渲染真实节点（ReactFlowNode）
