@@ -31,6 +31,7 @@ import {
   applyDragSettledToStore,
   applyEdgeChangesToStore,
   applyNodeChangesToStore,
+  canConnectNodes,
   toReactFlowEdges,
   toReactFlowNodes,
   type NomiReactFlowEdge,
@@ -289,6 +290,8 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           onDragOver={handleStageDragOver}
           onNodeContextMenu={handleNodeContextMenu}
           onPaneContextMenu={handlePaneContextMenu}
+          // S4-F8（D11 方案 B）：拖线时 isValidConnection 校验，无效连线即时拦截 + 视觉反馈。
+          isValidConnection={(connection) => canConnectNodes(connection.source, connection.target)}
           // S4-A4/A5/A6：react-flow 内建交互，显式配置对齐老画布行为——
           // 框选键 Shift（追加）、连线预览线贝塞尔（自研 rAF 预览线由 react-flow connection line 接管）。
           selectionKeyCode="Shift"

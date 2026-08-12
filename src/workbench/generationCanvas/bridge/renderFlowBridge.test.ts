@@ -7,6 +7,7 @@ import {
   applyConnectionToStore,
   applyDragSettledToStore,
   applyNodeChangesToStore,
+  canConnectNodes,
   snapshotToReactFlow,
   toReactFlowEdge,
   toReactFlowNode,
@@ -86,6 +87,15 @@ describe('react-flow 事件 → store 回写', () => {
     expect(edges).toHaveLength(1)
     expect(edges[0].source).toBe('a')
     expect(edges[0].target).toBe('b')
+  })
+
+  it('canConnectNodes 粗校验（D11）：缺节点/自连 → false；两节点存在 → true', () => {
+    // 缺节点：source 不在 store
+    expect(canConnectNodes('missing', 'b')).toBe(false)
+    // 自连（source === target）→ 拒绝
+    expect(canConnectNodes('a', 'a')).toBe(false)
+    // 两端存在（image→image 无 archetype，reference 粗校验放行）→ true
+    expect(canConnectNodes('a', 'b')).toBe(true)
   })
 
   it('回写后 store 变更能再次经 snapshotToReactFlow 反映（双向闭环成立）', () => {

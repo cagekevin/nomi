@@ -11,6 +11,7 @@ import type {
   GenerationCanvasNode,
 } from '../model/generationCanvasTypes'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
+import { validateReferenceEdge } from '../agent/referenceEdgeCapability'
 import type { Connection, Edge, Node, NodeChange } from '@xyflow/react'
 
 /** react-flow 节点把 Nomi 节点整个塞进 data，渲染层按需读取（业务字段不清空、不拍平——唯一真相在 store）。 */
@@ -96,6 +97,21 @@ export function applyDragSettledToStore(nodeId: string, position: { x: number; y
 export function applyConnectionToStore(connection: Connection): void {
   if (!connection.source || !connection.target) return
   useGenerationCanvasStore.getState().connectNodes(connection.source, connection.target)
+}
+
+/**
+ * react-flow 的 isValidConnection 校验（D11 方案 B）：拖线时判断能否连。
+ * mode 拖线时未定，用默认 reference 粗校验（参考槽可含任意槽，参考文本边放行）；
+ * 源无参考资产 / 目标模型完全不吃这类参考 → false（拦截，拖线即时视觉反馈）。
+ * store 为唯一真相源：查 store 节点对象喂 validateReferenceEdge。
+ */
+export function canConnectNodes(sourceId: string, targetId: string): boolean {
+  if (!sourceId || !targetId || sourceId === targetId) return false
+  const state = useGenerationCanvasStore.getState()
+  const source = state.nodes.find((n) => n.id === sourceId)
+  const target = state.nodes.find((n) => n.id === targetId)
+  if (!source || !target) return false
+  return validateReferenceEdge(source, target, 'reference').ok
 }
 
 /**
