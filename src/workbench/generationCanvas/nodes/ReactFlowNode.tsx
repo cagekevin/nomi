@@ -6,12 +6,14 @@
 // S2 阶段能力（按功能迁移映射表 STEP 1-4）：
 // - 渲染节点基础信息 + 状态（title/kind/status/progress）
 // - NodeResizer 缩放（react-flow 官方）
-// - 内容层按 kind 分发（audio/text/image/video）
-// - 浮动工具条（STEP 4）：NodeToolbar 包图片/视频/结果下载浮条（positionMode="inline" 复用纯按钮）
+// - 内容层按 kind 分发（audio/text/image/video/panorama）
+// - 浮动工具条（STEP 4）：NodeToolbar 包图片/视频/结果下载/全景浮条（positionMode="inline" 复用纯按钮）
 // - 预留 Handle 骨架（连线在 S4 接）
 // - 内容层（media/composer/参数条）后续按官方机制（NodeToolbar 等）逐步扩展
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { Handle, NodeResizer, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
+import { IconDownload, IconMaximize } from '@tabler/icons-react'
 import { cn } from '../../../utils/cn'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
@@ -28,6 +30,15 @@ import { useNodeImageEditing } from './useNodeImageEditing'
 import { applyFixationMakeup } from '../fixation/buildFixationNode'
 import NodeMediaPreviewDialog from './NodeMediaPreviewDialog'
 import ProvenancePanel from './ProvenancePanel'
+import PanoramaUploadFallback from './PanoramaUploadFallback'
+import { useNodePanoramaHandlers } from './useNodePanoramaHandlers'
+import { useResultDownload } from './useResultDownload'
+import {
+  FloatingToolbarShell,
+  TOOLBAR_ICON as TBI,
+  ToolbarButton,
+  ToolbarProvenanceButton,
+} from './NodeFloatingToolbar'
 import {
   isAudioLikeGenerationNodeKind,
   isImageLikeGenerationNodeKind,
@@ -35,6 +46,7 @@ import {
 } from '../model/generationNodeKinds'
 
 const NodeGenerationComposer = lazyWithChunkBoundary('节点生成面板', () => import('./NodeGenerationComposer'))
+const PanoramaViewer = lazyWithChunkBoundary('全景预览', () => import('./PanoramaViewer'))
 
 /** 节点状态徽标文案映射（skeleton，内容层细化在后续 STEP）。 */
 const STATUS_TEXT: Record<string, string> = {
@@ -46,13 +58,49 @@ const STATUS_TEXT: Record<string, string> = {
   recoverable: '可重试',
 }
 
+/** 内容层额外依赖（S2 逐步接入的引擎无关回调/ref，随 kind 分发喂给 body）。 */
+type NodeBodyDeps = {
+  /** 全景：把全屏触发器回填给浮条「全屏」按钮。 */
+  panoramaFullscreenTrigger: (trigger: (() => void) | null) => void
+  /** 全景：上传换图 / 视口截图建节点。 */
+  handlePanoramaFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
+  /** 全景：视口截图建节点。 */
+  handlePanoramaScreenshot: (screenshot: import('./PanoramaViewer').PanoramaScreenshot) => void
+}
+
 /**
  * 节点内容层按 kind 分发（S2 STEP 2，复用老画布引擎无关的 body，按 code-explorer 判定表）：
  * - audio/text：AudioStripNode（可直接复用，seek 归一化坐标，无自研 DOM 契约）
  * - image：DeferredNodeImage 媒体预览 + NodeInlineImageTitle 内联标题（均无画布 DOM 耦合，可直接复用）
+ * - video：NodeVideoPlaybackGuard（自愈播放）
+ * - panorama：PanoramaViewer（纯 props 驱动，全屏 createPortal(document.body)，引擎无关可复用）
  * - 其余 kind：先占位，后续 STEP 逐个接入（可复用的搬 / 需小改的删 DOM 契约 / 必须重写的按官方机制）
  */
-function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode'], selected: boolean): JSX.Element {
+function renderNodeBody(
+  node: NomiReactFlowNode['data']['nomiNode'],
+  selected: boolean,
+  deps: NodeBodyDeps,
+  visualSize: { width: number; height: number },
+): JSX.Element {
+  if (node.kind === 'panorama') {
+    const panoramaUrl = node.result?.url || node.meta?.imageUrl
+    if (!panoramaUrl) {
+      return <PanoramaUploadFallback onChange={deps.handlePanoramaFileChange} />
+    }
+    return (
+      <div className="relative h-[140px] w-full overflow-hidden bg-workbench-bg/40">
+        <React.Suspense fallback={<div className="h-full w-full bg-workbench-bg/40" />}>
+          <PanoramaViewer
+            imageUrl={panoramaUrl as string}
+            width={visualSize.width}
+            height={visualSize.height}
+            onEnterFullscreen={deps.panoramaFullscreenTrigger}
+            onScreenshot={deps.handlePanoramaScreenshot}
+          />
+        </React.Suspense>
+      </div>
+    )
+  }
   if (isAudioLikeGenerationNodeKind(node.kind)) {
     return <AudioStripNode node={node} />
   }
@@ -104,6 +152,7 @@ function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode'], selected: b
 }
 
 export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactFlowNode>): JSX.Element {
+  const { t } = useTranslation()
   const node = data.nomiNode
   const status = node.status ?? 'idle'
   const visualSize = React.useMemo(() => resolveNodeVisualSize(node), [node])
@@ -120,9 +169,15 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
   const openMediaPreview = React.useCallback(() => setMediaPreviewOpen(true), [])
   const closeMediaPreview = React.useCallback(() => setMediaPreviewOpen(false), [])
 
+  // —— 全景：全屏 trigger 回填 + 上传换图/截图建节点 + 下载 ——
+  const panoramaFullscreenRef = React.useRef<(() => void) | null>(null)
+  const panorama = useNodePanoramaHandlers(node, visualSize)
+  const panoramaDownload = useResultDownload(node)
+
   const isRemoveBackgroundPending =
     (node.status === 'queued' || node.status === 'running') && node.progress?.phase === 'remove-background'
   const isImageResult = node.kind !== 'panorama' && node.result?.type === 'image' && Boolean(node.result.url)
+  const isPanorama = node.kind === 'panorama'
 
   return (
     <>
@@ -138,53 +193,74 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       {/* 浮动工具条（react-flow 官方 NodeToolbar Top，S2 STEP 4）：生成后操作。
           NodeToolbar 提供恒定屏幕尺寸定位；浮条组件 positionMode="inline" 只复用纯按钮（ToolbarButton 等），
           不走老画布 FloatingToolbarShell 的反缩放定位（D1 定案废弃）。 */}
-      {node.prompt || isImageResult || node.result?.url ? (
+      {node.prompt || isImageResult || isPanorama || node.result?.url ? (
         <NodeToolbar position={Position.Top} offset={12} isVisible={selected}>
           <React.Suspense fallback={null}>
-            <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-1.5 py-1 shadow-nomi-md">
-              {/* 图片结果 → 图片编辑浮条（裁剪/AI编辑/画板/下载/生成记录）。 */}
-              {isImageResult ? (
-                <NodeImageEditToolbar
-                  node={node}
-                  editGrid={imageEditing.editGrid}
-                  imageOpBusy={imageEditing.imageOpBusy}
-                  onMakeup={() => applyFixationMakeup(node)}
-                  onGridSplit={(gridSize) => imageEditing.openEdit(gridSize)}
-                  onCrop={() => imageEditing.openEdit(1)}
-                  onTransform={(op) => void imageEditing.handleImageTransform(op)}
-                  onRemoveBackground={() => void imageEditing.handleRemoveBackground()}
-                  removeBackgroundBusy={isRemoveBackgroundPending}
-                  onPreview={openMediaPreview}
-                  onOpenProvenance={() => setProvenanceOpen(true)}
-                  positionMode="inline"
+            {/* 全景浮条：全屏 / 下载 / 生成记录 + 重传入口。 */}
+            {isPanorama ? (
+              <FloatingToolbarShell ariaLabel={t('generationCommon.node.panoramaActions')} positionMode="inline">
+                <ToolbarButton
+                  icon={<IconMaximize size={TBI.size} stroke={TBI.stroke} />}
+                  label={t('generationCommon.node.panoramaPreview')}
+                  title={t('generationCommon.node.panoramaPreview')}
+                  disabled={!node.result?.url}
+                  onClick={() => panoramaFullscreenRef.current?.()}
                 />
-              ) : null}
-              {/* 视频/其它非图片结果 → 下载/抽帧浮条（NodeResultDownloadButton 内部按结果类型分发）。
-                  图片结果已走 NodeImageEditToolbar，这里跳过避免重复。 */}
-              {!isImageResult ? (
-                <NodeResultDownloadButton
-                  node={node}
-                  selected={selected}
-                  onPreview={openMediaPreview}
-                  onOpenProvenance={() => setProvenanceOpen(true)}
-                  positionMode="inline"
+                <ToolbarButton
+                  icon={<IconDownload size={TBI.size} stroke={TBI.stroke} />}
+                  label={t('generationCommon.resultDownload.download')}
+                  title={t('generationCommon.resultDownload.downloadHint')}
+                  disabled={panoramaDownload.downloading}
+                  onClick={panoramaDownload.download}
                 />
-              ) : null}
-              {node.prompt ? (
-                <>
-                  <div className="mx-1 h-5 w-px bg-nomi-line" aria-hidden />
-                  <button
-                    type="button"
-                    className="rounded-nomi px-2 py-0.5 text-caption text-nomi-ink transition-colors hover:bg-nomi-accent/10 hover:text-nomi-accent"
-                    onClick={() => {
-                      void regenerateNodeInPlace(node.id)
-                    }}
-                  >
-                    重新生成
-                  </button>
-                </>
-              ) : null}
-            </div>
+                <ToolbarProvenanceButton onOpen={() => setProvenanceOpen(true)} />
+              </FloatingToolbarShell>
+            ) : (
+              <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-1.5 py-1 shadow-nomi-md">
+                {/* 图片结果 → 图片编辑浮条（裁剪/AI编辑/画板/下载/生成记录）。 */}
+                {isImageResult ? (
+                  <NodeImageEditToolbar
+                    node={node}
+                    editGrid={imageEditing.editGrid}
+                    imageOpBusy={imageEditing.imageOpBusy}
+                    onMakeup={() => applyFixationMakeup(node)}
+                    onGridSplit={(gridSize) => imageEditing.openEdit(gridSize)}
+                    onCrop={() => imageEditing.openEdit(1)}
+                    onTransform={(op) => void imageEditing.handleImageTransform(op)}
+                    onRemoveBackground={() => void imageEditing.handleRemoveBackground()}
+                    removeBackgroundBusy={isRemoveBackgroundPending}
+                    onPreview={openMediaPreview}
+                    onOpenProvenance={() => setProvenanceOpen(true)}
+                    positionMode="inline"
+                  />
+                ) : null}
+                {/* 视频/其它非图片结果 → 下载/抽帧浮条（NodeResultDownloadButton 内部按结果类型分发）。
+                    图片结果已走 NodeImageEditToolbar，这里跳过避免重复。 */}
+                {!isImageResult ? (
+                  <NodeResultDownloadButton
+                    node={node}
+                    selected={selected}
+                    onPreview={openMediaPreview}
+                    onOpenProvenance={() => setProvenanceOpen(true)}
+                    positionMode="inline"
+                  />
+                ) : null}
+                {node.prompt ? (
+                  <>
+                    <div className="mx-1 h-5 w-px bg-nomi-line" aria-hidden />
+                    <button
+                      type="button"
+                      className="rounded-nomi px-2 py-0.5 text-caption text-nomi-ink transition-colors hover:bg-nomi-accent/10 hover:text-nomi-accent"
+                      onClick={() => {
+                        void regenerateNodeInPlace(node.id)
+                      }}
+                    >
+                      重新生成
+                    </button>
+                  </>
+                ) : null}
+              </div>
+            )}
           </React.Suspense>
         </NodeToolbar>
       ) : null}
@@ -249,7 +325,15 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       </div>
 
       {/* 节点主体：按 kind 分发内容层 */}
-      <div className="w-full">{renderNodeBody(node, selected)}</div>
+      <div className="w-full">
+        {renderNodeBody(node, selected, {
+          panoramaFullscreenTrigger: (trigger) => {
+            panoramaFullscreenRef.current = trigger
+          },
+          handlePanoramaFileChange: panorama.handlePanoramaFileChange,
+          handlePanoramaScreenshot: panorama.handlePanoramaScreenshot,
+        }, visualSize)}
+      </div>
 
       {/* 状态行（progress 骨架） */}
       {status === 'running' && node.progress ? (
