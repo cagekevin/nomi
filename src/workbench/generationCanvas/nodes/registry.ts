@@ -49,8 +49,12 @@ function defineGenerationNodePlugins<
   return plugins
 }
 
+// S8：老画布 BaseGenerationNode 已删，react-flow 用 ReactFlowNode（容器 nodeTypes.default）。
+// registry 的 component 字段是懒加载元数据，react-flow 渲染不走它（容器用 nodeTypes.default），
+// getGenerationNodeComponent 也无调用方。这里指向 ReactFlowNode 消除死引用；类型用 unknown 桥接
+// （ReactFlowNode 的 NodeProps 与老画布 GenerationNodeComponent 契约不同，但无调用方消费该字段，安全）。
 const loadBaseGenerationNode = () =>
-  import('./BaseGenerationNode') as Promise<{
+  import('./ReactFlowNode') as unknown as Promise<{
     default: GenerationNodeComponent
   }>
 
