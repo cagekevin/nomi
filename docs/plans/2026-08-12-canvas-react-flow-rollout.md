@@ -470,6 +470,15 @@
 - 源码核查：B2（`useOnViewportChange` 记忆 `categoryViewports`）依赖 B1（`store.canvasZoom/Offset` 同步），当前容器 `fitView={false}`、viewport 恒 `{0,0,1}`，**无 B1 同步时 B2 无意义**。
 - 决策：S4 **不做 B2**，与 B1 一起归 S5（避免在无坐标同步的半成品上做记忆，白做还引入双份状态坑）。S4 已完成的 B5（`screenToFlowPosition` 坐标换算）已随 D1/D2 落地。
 
+**D11｜react-flow 手动连线用 `isValidConnection` 粗校验 + `connectNodes`，不强行接 `completeNodeConnection`（S4，执行定）**
+- 老画布手动连线走 `completeNodeConnection`（依赖 `pendingConnectionSourceId`）→ `connectToNode`（含 `validateReferenceEdge` 校验 + 槽满 toast）。
+- react-flow `onConnect` 无 pending 语义（一次性给 `{source, target}`）。已接 `connectNodes`（与 agent/3D 同路径），但 `connectNodes` **无 `validateReferenceEdge` 校验**（源码核实 L270-285）→ 可能建出无效边（源无参考资产）。
+- 方案权衡：
+  - A：改 `applyConnectionToStore` 先 `startConnection` 设 pending 再 `completeNodeConnection` —— **侵入 store pending 语义**，为 react-flow 造旁路，违反奥卡姆。
+  - B：用 react-flow 官方 `isValidConnection` 在**拖线时**校验（`validateReferenceEdge` 粗校验），拦截无效连线（视觉红/绿反馈），`onConnect` 仍走 `connectNodes`（只会在合法时触发）。
+- 决策：**方案 B**。理由：不侵入 store 语义；`isValidConnection` 是官方机制（拖线即时反馈）；无效连线在源头拦截。槽满 toast 等增强反馈留 S8 测试迁移补。
+- 含义：桥加 `canConnectNodes(sourceId, targetId)`（内部 `validateReferenceEdge`，mode 未定用粗校验）+ 容器 `isValidConnection`。
+
 ### 已完成 commit 清单
 | commit | 阶段 | 内容 |
 |---|---|---|
