@@ -13,6 +13,7 @@ import '@xyflow/react/dist/style.css'
 import { cn } from '../../../utils/cn'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'
+import { ReactFlowNode } from '../nodes/ReactFlowNode'
 import { CanvasEmptyState } from './CanvasEmptyState'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME } from '../../assets/assetLibraryDrag'
@@ -30,29 +31,8 @@ import {
   type NomiReactFlowNode,
 } from '../bridge/renderFlowBridge'
 
-/**
- * S1 最简节点卡片：展示 store nomiNode 的 title/kind。
- * S2 将替换为 BaseGenerationNode 的 nodeTypes 映射（深模块重写，见 plan §三.5）。
- */
-function S1SimpleNode({ data }: NodeProps<NomiReactFlowNode>): JSX.Element {
-  const nomiNode = data.nomiNode
-  return (
-    <div
-      className={cn(
-        'generation-canvas-v2-node',
-        'w-[220px] rounded-nomi border border-nomi-line bg-nomi-paper p-3 shadow-nomi-md',
-        'text-body-sm text-nomi-ink',
-      )}
-      data-node-id={nomiNode.id}
-    >
-      <div className="font-medium truncate">{nomiNode.title || nomiNode.id}</div>
-      <div className="text-caption text-nomi-ink-60">{nomiNode.kind}</div>
-    </div>
-  )
-}
-
 const nodeTypes: NodeTypes = {
-  default: S1SimpleNode,
+  default: ReactFlowNode,
 }
 
 /** S1 容器：包 ReactFlowProvider，供后续 screenToFlowPosition 等（S4/S5）。 */
