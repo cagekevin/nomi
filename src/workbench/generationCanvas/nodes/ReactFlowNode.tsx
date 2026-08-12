@@ -14,6 +14,7 @@ import { cn } from '../../../utils/cn'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { resolveNodeVisualSize } from './nodeSizing'
+import { regenerateNodeInPlace } from '../runner/generationRunController'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
@@ -109,6 +110,24 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           <NodeGenerationComposer node={node} visualSize={visualSize} positionMode="inline" />
         </React.Suspense>
       </NodeToolbar>
+
+      {/* 浮动工具条（react-flow 官方 NodeToolbar Top，S2 STEP 4）：生成后操作。
+          精简版先接「重新生成」（regenerateNodeInPlace，引擎无关）；完整 4 处复用（图片/视频/全景/结果下载）后续扩展。 */}
+      {node.prompt ? (
+        <NodeToolbar position={Position.Top} offset={12} isVisible={selected}>
+          <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-2 py-1 text-caption shadow-nomi-md">
+            <button
+              type="button"
+              className="rounded-nomi px-2 py-0.5 text-nomi-ink transition-colors hover:bg-nomi-accent/10 hover:text-nomi-accent"
+              onClick={() => {
+                void regenerateNodeInPlace(node.id)
+              }}
+            >
+              重新生成
+            </button>
+          </div>
+        </NodeToolbar>
+      ) : null}
 
       <div
         className={cn(
