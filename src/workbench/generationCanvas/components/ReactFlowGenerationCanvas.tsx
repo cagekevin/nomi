@@ -8,7 +8,7 @@
 // S2 才接真实内容层节点（BaseGenerationNode nodeTypes）；本阶段用最简卡片渲染，验证桥闭环。
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, Position, ConnectionLineType, ConnectionMode, type Connection, type NodeTypes, type EdgeTypes } from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, useOnViewportChange, useNodesInitialized, Position, ConnectionLineType, ConnectionMode, type Connection, type NodeTypes, type EdgeTypes, type Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 // 紧跟官方 style.css：覆盖 react-flow 强加给自定义节点 wrapper 的默认白底/边框/padding（见文件头注释）。
 import '../styles/reactFlowOverrides.css'
@@ -21,6 +21,8 @@ import CanvasToolbar, { NodeAddMenu } from './CanvasToolbar'
 import { CanvasEmptyState } from './CanvasEmptyState'
 import { ReactFlowGroupFrameOverlay } from './ReactFlowGroupFrameOverlay'
 import { getCanvasGroupBoxes } from './generationCanvasGeometry'
+import { CanvasNavigationStack } from './CanvasNavigationStack'
+import { useTidyCanvas } from './useTidyCanvas'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
@@ -78,7 +80,59 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const activeCategoryId = useWorkbenchStore((state) => state.activeCategoryId)
   // S4-B5：client → canvas 坐标换算（react-flow 官方，替代老画布 getCanvasPointFromClientPoint 自研换算）。
   // canvas → screen 用于菜单 DOM 定位（NodeAddMenu 是 absolute 屏幕定位，需相对容器的 screen 坐标）。
-  const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
+  const { screenToFlowPosition, flowToScreenPosition, setViewport, fitView, zoomTo, setCenter } = useReactFlow()
+
+  // S5-B1 变换同步（react-flow → store）：react-flow viewport 为运行时真源，store.canvasZoom/Offset 仅镜像。
+  // onChange 平移节流 100ms 写 store（防每帧 store 风暴，老画布 useCanvasTransformStoreSync 同思想）；
+  // onEnd 即时落定。回环 guard：写前比较旧值，值未变则跳过（防 store→react-flow 的 setViewport 又写回）。
+  // S5-B2 多分类 viewport 记忆（workbenchStore，复用老画布 useCanvasViewport 语义）：
+  // onEnd 松手才记（避免每帧写）；切分类时读记忆 setViewport 恢复，无记忆则 fitView（B3）。
+  const categoryViewports = useWorkbenchStore((state) => state.categoryViewports)
+  const rememberCategoryViewport = useWorkbenchStore((state) => state.rememberCategoryViewport)
+  const lastCategoryRef = React.useRef(activeCategoryId)
+  const nodesInitialized = useNodesInitialized()
+
+  const setCanvasTransform = useGenerationCanvasStore((state) => state.setCanvasTransform)
+  const lastSyncedViewportRef = React.useRef<Viewport>({ x: 0, y: 0, zoom: 1 })
+  const panSyncTimerRef = React.useRef<number | null>(null)
+  const writeTransformToStore = React.useCallback(
+    (viewport: Viewport) => {
+      const { canvasZoom, canvasOffset } = useGenerationCanvasStore.getState()
+      if (canvasZoom === viewport.zoom && canvasOffset.x === viewport.x && canvasOffset.y === viewport.y) return
+      lastSyncedViewportRef.current = viewport
+      setCanvasTransform(viewport.zoom, { x: viewport.x, y: viewport.y })
+    },
+    [setCanvasTransform],
+  )
+  // useOnViewportChange 的回调经 store.setState 注册，闭包不随每次渲染刷新——用 ref 持最新分类/记忆。
+  const viewportCtxRef = React.useRef({ rememberCategoryViewport, lastCategoryRef })
+  viewportCtxRef.current = { rememberCategoryViewport, lastCategoryRef }
+  useOnViewportChange({
+    onChange: (viewport) => {
+      // 平移节流：缩放即时，平移 100ms 一拍（onEnd 会即时落定，过程只是让 store 不太滞后）。
+      if (viewport.zoom !== lastSyncedViewportRef.current.zoom) {
+        writeTransformToStore(viewport)
+        return
+      }
+      if (panSyncTimerRef.current !== null) return
+      panSyncTimerRef.current = window.setTimeout(() => {
+        panSyncTimerRef.current = null
+        writeTransformToStore(viewport)
+      }, 100)
+    },
+    onEnd: (viewport) => {
+      if (panSyncTimerRef.current !== null) {
+        window.clearTimeout(panSyncTimerRef.current)
+        panSyncTimerRef.current = null
+      }
+      writeTransformToStore(viewport)
+      // B2：松手记当前分类的 viewport（记忆源在 workbenchStore，react-flow 侧状态不落 generationCanvasStore）。
+      viewportCtxRef.current.rememberCategoryViewport(viewportCtxRef.current.lastCategoryRef.current, {
+        zoom: viewport.zoom,
+        offset: { x: viewport.x, y: viewport.y },
+      })
+    },
+  })
 
   // C1 左侧添加节点工具栏：挂容器，落点 = 视口锚（容器 38%/28% 处）→ screenToFlowPosition 转 canvas。
   // 对齐老画布 getToolbarInsertionPosition（GenerationCanvas.tsx:391-401，默认生成节点落上半区留 composer）。
@@ -259,6 +313,66 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
     setRfEdges(toReactFlowEdges(edges))
   }, [nodes, edges, setRfEdges, setRfNodes])
 
+  // S5-B2/B3：切分类 → 记旧分类 viewport，恢复新分类记忆或首载 fitView。
+  // 只在分类确实变化时触发（lastCategoryRef 对照），避免首次渲染误恢复。
+  React.useEffect(() => {
+    if (lastCategoryRef.current === activeCategoryId) return
+    // 旧分类的 viewport 由 B1 onEnd 已记过（松手即记）；这里只在切换瞬间兜底补记一次。
+    rememberCategoryViewport(lastCategoryRef.current, {
+      zoom: lastSyncedViewportRef.current.zoom,
+      offset: { x: lastSyncedViewportRef.current.x, y: lastSyncedViewportRef.current.y },
+    })
+    const remembered = categoryViewports[activeCategoryId]
+    if (remembered) {
+      setViewport({ x: remembered.offset.x, y: remembered.offset.y, zoom: remembered.zoom }, { duration: 0 })
+    } else if (nodesInitialized) {
+      // 无记忆（首载/新分类）→ 自动 fit（B3）。
+      void fitView({ padding: 0.2, duration: 0 })
+    }
+    lastCategoryRef.current = activeCategoryId
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCategoryId, nodesInitialized])
+
+  // S5-C5 minimap + 缩放条：复用老画布 CanvasNavigationStack（纯 props 驱动）。
+  // 坐标源 = store.canvasZoom/Offset（B1 已同步 react-flow viewport 镜像）+ 容器尺寸。
+  const canvasZoom = useGenerationCanvasStore((state) => state.canvasZoom)
+  const canvasOffset = useGenerationCanvasStore((state) => state.canvasOffset)
+  const selectedNodeIds = useGenerationCanvasStore((state) => state.selectedNodeIds)
+  const [stageSize, setStageSize] = React.useState<{ width: number; height: number }>({ width: 0, height: 0 })
+  React.useEffect(() => {
+    const el = canvasRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const update = () => setStageSize({ width: el.clientWidth, height: el.clientHeight })
+    update()
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  const [minimapVisible, setMinimapVisible] = React.useState(true)
+  const { tidy } = useTidyCanvas(activeCategoryId)
+  const handleJumpToCanvasPoint = React.useCallback(
+    (point: { x: number; y: number }) => {
+      // minimap 点/拖 → 把视口中心跳到该 canvas 点（保持当前 zoom）。
+      setCenter(point.x, point.y, { zoom: lastSyncedViewportRef.current.zoom })
+    },
+    [setCenter],
+  )
+  const handleFitView = React.useCallback(() => {
+    void fitView({ padding: 0.2, duration: 0 })
+  }, [fitView])
+  const handleResetView = React.useCallback(() => {
+    setViewport({ x: 0, y: 0, zoom: 1 }, { duration: 0 })
+  }, [setViewport])
+  const handleZoomTo = React.useCallback(
+    (nextZoom: number) => {
+      zoomTo(nextZoom, { duration: 0 })
+    },
+    [zoomTo],
+  )
+  const handleTidy = React.useCallback(() => {
+    tidy(1.8)
+  }, [tidy])
+
   // 回写半程：react-flow 事件 → 桥 → store。
   const handleNodesChange = React.useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
@@ -349,6 +463,8 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           // S1 空容器不 fitView（初始 viewport {0,0,1}，保证 stage 坐标 == canvas 坐标）；
           // 自动 fit 是 S5（B3/G4）。
           fitView={false}
+          // S5-F7 LOD：react-flow 内建虚拟化，只渲染视口可见节点/边（替代老画布手写裁剪），大画布自动生效。
+          onlyRenderVisibleElements
           minZoom={0.2}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
@@ -363,6 +479,23 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
             // 若无 pending（如非拖线触发）则安全返回，connectToGroup 内部会 clearPending。
             connectToGroup(groupId)
           }}
+        />
+        {/* S5-C5 左下 minimap + 缩放条：复用老画布 CanvasNavigationStack（纯 props），坐标来自 store（B1 同步）。 */}
+        <CanvasNavigationStack
+          readOnly={readOnly}
+          nodes={nodes}
+          selectedIds={new Set(selectedNodeIds)}
+          zoom={canvasZoom || 1}
+          zoomPercent={Math.round((canvasZoom || 1) * 100)}
+          offset={canvasOffset}
+          stageSize={stageSize}
+          minimapVisible={minimapVisible}
+          onToggleMinimap={() => setMinimapVisible((v) => !v)}
+          onJumpToCanvasPoint={handleJumpToCanvasPoint}
+          onFitView={handleFitView}
+          onResetView={handleResetView}
+          onZoomTo={handleZoomTo}
+          onTidy={handleTidy}
         />
         {!readOnly ? (
           <CanvasToolbar getInsertionPosition={getInsertionPosition} categoryId={activeCategoryId} />
