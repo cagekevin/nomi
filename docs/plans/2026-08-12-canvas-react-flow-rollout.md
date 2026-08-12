@@ -480,6 +480,11 @@
 - 决策：**方案 B**。理由：不侵入 store 语义；`isValidConnection` 是官方机制（拖线即时反馈）；无效连线在源头拦截。槽满 toast 等增强反馈留 S8 测试迁移补。
 - 含义：桥加 `canConnectNodes(sourceId, targetId)`（内部 `validateReferenceEdge`，mode 未定用粗校验）+ 容器 `isValidConnection`。
 
+**D12｜S4-F10 为空任务，不重写（2026-08-12，用户要求证实后定）**
+- plan §二 F10 引用 `ComposerNodeOutPortSelectionLayer`（"SVG 出端口选择层"）。**证实**：① 当前代码库搜无（`OutPort`/`out-port`/`出端口` 全 0 命中）；② git 全历史无（`git log --all -- '*OutPort*'` 无结果）；③ 老画布连线即左右两个 `MagneticConnectionHandle`（left=input/right=output，`startConnection` side 仅 'left'|'right'），无多出端口选择；④ react-flow `Handle`（target Left / source Right）+ `ConnectionMode.Loose` 在 S4-F8 已等价实现。
+- 决策：**F10 为空任务**。不凭空发明功能重写（奥卡姆剃刀，加新必删旧）。连线出端口由 F8 Handle 承担。S4 完成。
+- 含义：plan §二 F10 行标"已证实不存在/被 F8 覆盖"，§三阶段表 S4 勾销 F10。
+
 ### 已完成 commit 清单
 | commit | 阶段 | 内容 |
 |---|---|---|
@@ -513,6 +518,7 @@
 | （未提交）| 机制 | 原版对齐自查 walk（canvas-react-flow-parity.walk.mjs，23 断言） |
 
 ### 进行中 / 下一步
+- **✅ S4-F10 证实为空任务（2026-08-12，D12）**：plan §二 F10 引用的 `ComposerNodeOutPortSelectionLayer`（"SVG 出端口选择层"）在**当前代码库 + git 全历史均不存在**（`git log --all -- '*OutPort*'` 无结果）。老画布连线交互即左右两个连接手柄（`MagneticConnectionHandle` left=input/right=output，`startConnection` side 仅 'left'|'right'），无多出端口选择。react-flow 的 `Handle`（target Left / source Right）+ `ConnectionMode.Loose` 已在 S4-F8 等价实现。**决策：F10 为空任务，不凭空发明功能重写**（奥卡姆剃刀），连线出端口由 F8 Handle 承担。详见 D12。
 - **✅ S4-F9 组框连整组代码就位（2026-08-12）**：react-flow 容器渲染组框（`ReactFlowGroupFrameOverlay`，useViewport 同步 transform）+ `onConnectEnd` 加"命中组框空白→startConnection+connectToGroup"分支（复刻老画布 findConnectionTargetGroupId）。typecheck/build/test（4121）/parity walk（23）全绿。**完整真机连整组依赖 S6 成组入口**（当前无 UI 建 group，S6 C3 多选工具条含成组按钮），S4 已做到代码就位+无回归。
 - **✅ 白边/错位已修（2026-08-12，commit `c165d32`）**：react-flow 给自定义节点 wrapper（`.react-flow__node-default`）强加内置 default 节点的视觉（`background:#fff / border:1px solid #1a192b / padding:10px`），使 wrapper 比内部根 div 大一圈 → 白底外露 + 内容被 padding 偏移（实测 wrapper 与 inner 错位 11px）。**修**：新建 `styles/reactFlowOverrides.css` 清掉 wrapper 默认视觉，容器紧随官方 style.css 之后 import。实测修复后 wrapper 与 inner 几何完全重合。
 - **✅ 原版对齐自查机制（2026-08-12）**：`tests/ux/canvas-react-flow-parity.walk.mjs`（23 项断言全绿），把「活不仔细/和原版差别大」变成自动化断言：wrapper 几何==inner（防白边）、wrapper 无默认白底/边框/padding、i18n key 无泄漏、pending 占位来自 i18n、工具栏≥4 按钮、渲染宽=整数。**跑法**：`VITE_RENDER_CANVAS_WITH_REACT_FLOW=true pnpm run build && node tests/ux/canvas-react-flow-parity.walk.mjs`。**教训**：基线不能拍脑袋（曾把 image 节点宽臆断为 220，实为 registry defaultSize 340），必须读老画布源码/实测。
