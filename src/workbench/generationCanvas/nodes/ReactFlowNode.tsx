@@ -14,8 +14,13 @@ import { cn } from '../../../utils/cn'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
+import { NodeVideoPlaybackGuard } from './NodeVideoPlaybackGuard'
 import { NodeInlineImageTitle } from './NodeImagePreviewActions'
-import { isAudioLikeGenerationNodeKind, isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
+import {
+  isAudioLikeGenerationNodeKind,
+  isImageLikeGenerationNodeKind,
+  isVideoLikeGenerationNodeKind,
+} from '../model/generationNodeKinds'
 
 /** 节点状态徽标文案映射（skeleton，内容层细化在后续 STEP）。 */
 const STATUS_TEXT: Record<string, string> = {
@@ -36,6 +41,23 @@ const STATUS_TEXT: Record<string, string> = {
 function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode'], selected: boolean): JSX.Element {
   if (isAudioLikeGenerationNodeKind(node.kind)) {
     return <AudioStripNode node={node} />
+  }
+  if (isVideoLikeGenerationNodeKind(node.kind)) {
+    const videoUrl = node.result?.url
+    if (!videoUrl) {
+      return (
+        <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
+          <span>内容层（{node.kind}，S2 后续 STEP 接入）</span>
+          <span className="opacity-60">{node.prompt ? '· 有 prompt ·' : '· 空节点 ·'}</span>
+        </div>
+      )
+    }
+    return (
+      <div className="relative aspect-video w-full overflow-hidden bg-workbench-bg/40">
+        <NodeVideoPlaybackGuard nodeId={node.id} rawUrl={videoUrl} className="h-full w-full object-contain" />
+        <NodeInlineImageTitle nodeId={node.id} value={node.title || node.id} selected={selected} />
+      </div>
+    )
   }
   if (isImageLikeGenerationNodeKind(node.kind)) {
     const imageUrl = node.result?.url || node.result?.thumbnailUrl
