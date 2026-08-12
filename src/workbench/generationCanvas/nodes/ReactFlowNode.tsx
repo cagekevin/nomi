@@ -86,6 +86,8 @@ type NodeBodyDeps = {
   onImageStackOpenChange: (open: boolean) => void
   /** 只读（分享预览等）：隐藏可交互浮条/编辑入口。 */
   readOnly: boolean
+  /** 未生成/加载中占位文案（i18n，避免硬编码）。 */
+  pendingText: string
 }
 
 /**
@@ -154,8 +156,7 @@ function renderNodeBody(
     if (!videoUrl) {
       return (
         <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
-          <span>内容层（{node.kind}，S2 后续 STEP 接入）</span>
-          <span className="opacity-60">{node.prompt ? '· 有 prompt ·' : '· 空节点 ·'}</span>
+          <span>{deps.pendingText}</span>
         </div>
       )
     }
@@ -181,8 +182,7 @@ function renderNodeBody(
     if (!imageUrl) {
       return (
         <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
-          <span>内容层（{node.kind}，S2 后续 STEP 接入）</span>
-          <span className="opacity-60">{node.prompt ? '· 有 prompt ·' : '· 空节点 ·'}</span>
+          <span>{deps.pendingText}</span>
         </div>
       )
     }
@@ -225,8 +225,7 @@ function renderNodeBody(
   }
   return (
     <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
-      <span>内容层（{node.kind}，S2 后续 STEP 接入）</span>
-      <span className="opacity-60">{node.prompt ? '· 有 prompt ·' : '· 空节点 ·'}</span>
+      <span>{deps.pendingText}</span>
     </div>
   )
 }
@@ -342,7 +341,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
                         void regenerateNodeInPlace(node.id)
                       }}
                     >
-                      重新生成
+                      {t('generationCommon.node.regenerate')}
                     </button>
                   </>
                 ) : null}
@@ -425,6 +424,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           imageStackOpen,
           onImageStackOpenChange: setImageStackOpen,
           readOnly: false,
+          pendingText: t('generationCommon.node.pending'),
         }, visualSize)}
       </div>
 
