@@ -452,11 +452,13 @@
 | `80282fd` | S2-STEP2 | 缩放副作用迁移（NodeResizer onResizeEnd 回写 store.size + 媒体 keepAspectRatio） |
 | `2209d73` | S2-STEP3 | composer 定位引擎无关化（去 useComposerViewportPlacement 反缩放/翻转/避让 + 删孤儿 hook） |
 | `daabb5a` | S2-STEP3 | composer 完整接入 ReactFlowNode（NodeToolbar 恒定尺寸 + positionMode prop） |
+| `c9d00cc` | S2-STEP4 | 浮条补全：FloatingToolbarShell 加 positionMode="inline" 解耦定位外壳；ReactFlowNode 用 NodeToolbar Top 接图片/视频/结果下载 3 处浮条 |
 
 ### 进行中 / 下一步
-- S2 STEP 4：浮动工具条完整接入 `NodeToolbar`（当前 NodeToolbar 已含 composer；`NodeFloatingToolbar` 4 处复用接官方）。
-- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用）；需小改 `ImageResultStackControls`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`。
+- S2 STEP 4：浮条组件加 `positionMode="inline"`（`FloatingToolbarShell` 解耦定位外壳，只复用纯按钮）+ `ReactFlowNode` 用 `NodeToolbar Top` 接入图片/视频/结果下载 3 处。**全景浮条待补**（依赖 PanoramaViewer 内容层 `onEnterFullscreen` ref，S2 剩余 content 接入后一并补）。
+- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用，需接 `useNodeImageEditing` 编辑态）；需小改 `ImageResultStackControls`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`（**全景浮条依赖项**）。`NodeMediaPreviewDialog` 复查：portal 目标 `.workbench-generation__canvas` 在 react-flow 下仍存在（react-flow 容器挂其内），**无需重写**，直接复用。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
+- **门岗待办**：ReactFlowNode 迁移期占位文案（`内容层（`/`· 有 prompt ·`/`· 空节点 ·`/`重新生成`）触 check:i18n（13 literal，HEAD 基线既有非本次引入），S2 后续 STEP 替换真实内容层时自然消失，不扩大本次 diff。
 
 ### 验收对照（S2 目标 vs 现状）
 - ✅ 容器渲染真实节点（ReactFlowNode）
@@ -467,8 +469,9 @@
 - ✅ 拖拽副作用迁移（松手一次回写 store + undo + moved 事件）
 - ✅ 缩放副作用迁移（NodeResizer onResizeEnd 回写 store.size + 媒体 keepAspectRatio 等比锁）
 - ✅ composer 完整内容（NodeToolbar 恒定尺寸定位，positionMode 双轨）
-- ⏳ 浮动工具条完整（NodeFloatingToolbar 接 NodeToolbar）
-- ⏳ image 裁剪、panorama、whiteboard、preview 弹窗
+- ✅ 浮动工具条：`FloatingToolbarShell` 加 `positionMode="inline"` 解耦定位；`ReactFlowNode` 用 `NodeToolbar Top` 接图片（`NodeImageEditToolbar`）/视频/结果下载（`NodeResultDownloadButton`）3 处
+- ⏳ 浮动工具条：全景 1 处（依赖 PanoramaViewer 内容层）
+- ⏳ image 裁剪、panorama、whiteboard、preview 弹窗（preview 复查：portal 目标 react-flow 下仍有效，无需重写）
 - ⏳ 连线 Handle（S4）
 
 ---
