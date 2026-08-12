@@ -446,9 +446,10 @@
 | `673617a` | S2-STEP1 | ReactFlowNode 节点 + 容器 nodeTypes |
 | `2a64ab7` | S2-STEP2 | 内容层 kind 分发 + AudioStripNode |
 | `43cc7ee` | S2-STEP2 | image 内容层（DeferredNodeImage + NodeInlineImageTitle） |
+| `6d564c3` | S2-STEP2 | video 内容层（NodeVideoPlaybackGuard 自愈播放） |
 
 ### 进行中 / 下一步
-- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用）；需小改 `ImageResultStackControls`/`NodeVideoPlaybackGuard`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`。
+- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用）；需小改 `ImageResultStackControls`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`。
 - S2 STEP 3：composer 用 `NodeToolbar`。
 - S2 STEP 4：浮动工具条用 `NodeToolbar`。
 - S2 STEP 2 拖拽/缩放副作用迁移（`onNodeDrag`/`onResize`）。
@@ -456,8 +457,10 @@
 
 ### 验收对照（S2 目标 vs 现状）
 - ✅ 容器渲染真实节点（ReactFlowNode）
-- ✅ audio/text/image 内容层
-- ⏳ image 裁剪、video、panorama、whiteboard、preview 弹窗
+- ✅ audio/text 内容层（AudioStripNode）
+- ✅ image 内容层（DeferredNodeImage + NodeInlineImageTitle）
+- ✅ video 内容层（NodeVideoPlaybackGuard 自愈播放）
+- ⏳ image 裁剪、panorama、whiteboard、preview 弹窗
 - ⏳ composer（NodeToolbar）
 - ⏳ 浮动工具条（NodeToolbar）
 - ⏳ 拖拽/缩放副作用迁移
