@@ -10,6 +10,8 @@ import React from 'react'
 import { useTranslation } from 'react-i18next'
 import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, Position, ConnectionLineType, ConnectionMode, type Connection, type NodeTypes, type EdgeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
+// 紧跟官方 style.css：覆盖 react-flow 强加给自定义节点 wrapper 的默认白底/边框/padding（见文件头注释）。
+import '../styles/reactFlowOverrides.css'
 import { cn } from '../../../utils/cn'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'

@@ -1,0 +1,21 @@
+/* reactFlowOverrides.css — react-flow 渲染层第三方 wrapper 覆盖。
+ *
+ * react-flow 把自定义节点渲染进 `div.react-flow__node.react-flow__node-default`(NodeWrapper)。
+ * 官方样式 `.react-flow__node-default`(style.css) 给这个 wrapper 强加内置 default 节点的视觉：
+ *   padding:10px / border:1px solid #1a192b / background-color:#fff / width:150px / text-align:center
+ * 我们的 ReactFlowNode 自带完整视觉（节点根 bg/ring/shadow 全在组件 className），这些默认值会让
+ * wrapper 比内部节点根 div 大一圈：白底外露 + 内部内容被 padding 偏移 → 画面表现即"节点有白边/没居中"。
+ * 必须清掉 wrapper 默认视觉，让它纯透传，由自定义节点根 div 呈现。选中态视觉由
+ * .generation-canvas-v2-node 自带的 ring-2 ring-nomi-accent 承担，不依赖 react-flow 默认 box-shadow。
+ * 本文件紧跟官方 `@xyflow/react/dist/style.css` import，保证同 chunk 且顺序在后。 */
+.react-flow__node-default,
+.react-flow__node-input,
+.react-flow__node-output,
+.react-flow__node-group {
+  padding: 0;
+  border: 0;
+  background-color: transparent;
+  width: auto;
+  color: inherit;
+  text-align: left;
+}
