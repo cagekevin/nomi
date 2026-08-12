@@ -12,9 +12,31 @@ import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 
 const ICON = { size: 16, stroke: 1.6 } as const
 
-/** 浮条外壳：定位 + 反向缩放 + token 合规容器。 */
-export function FloatingToolbarShell({ ariaLabel, children }: { ariaLabel: string; children: React.ReactNode }): JSX.Element {
+/**
+ * 浮条外壳：定位 + 反向缩放 + token 合规容器。
+ *
+ * `positionMode`（react-flow 迁移用，S2 STEP 4）：
+ * - `absolute-below`（默认）：老画布定位（浮节点上方 + 反缩放 + 拖拽隐身）。老画布专用，react-flow 不用。
+ * - `inline`：不渲染定位外壳，只输出裸按钮容器——react-flow 用 `NodeToolbar` 提供定位（官方恒定屏幕尺寸），
+ *   这里只复用 token 合规的按钮排布（`ToolbarButton` 等原子 UI 是纯组件，与定位解耦）。
+ */
+export function FloatingToolbarShell({
+  ariaLabel,
+  positionMode = 'absolute-below',
+  children,
+}: {
+  ariaLabel: string
+  positionMode?: 'absolute-below' | 'inline'
+  children: React.ReactNode
+}): JSX.Element {
   const canvasZoom = useGenerationCanvasStore((state) => state.canvasZoom)
+  if (positionMode === 'inline') {
+    return (
+      <div className="inline-flex items-center gap-1 min-h-9 px-1.5 py-1" role="toolbar" aria-label={ariaLabel}>
+        {children}
+      </div>
+    )
+  }
   return (
     <div
       className={cn(

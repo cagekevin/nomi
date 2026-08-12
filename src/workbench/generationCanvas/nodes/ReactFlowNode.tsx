@@ -3,9 +3,11 @@
 // 目标（用户拍板）：安全过渡到 react-flow，功能逐个按官方机制迁移。老画布（BaseGenerationNode）
 // 是过渡产品，S7 删。本节点从零消费 NodeProps + store，不依赖 BaseGenerationNode 的 952 行自研壳。
 //
-// S2 阶段能力（按功能迁移映射表 STEP 1）：
+// S2 阶段能力（按功能迁移映射表 STEP 1-4）：
 // - 渲染节点基础信息 + 状态（title/kind/status/progress）
 // - NodeResizer 缩放（react-flow 官方）
+// - 内容层按 kind 分发（audio/text/image/video）
+// - 浮动工具条（STEP 4）：NodeToolbar 包图片/视频/结果下载浮条（positionMode="inline" 复用纯按钮）
 // - 预留 Handle 骨架（连线在 S4 接）
 // - 内容层（media/composer/参数条）后续按官方机制（NodeToolbar 等）逐步扩展
 import React from 'react'
@@ -20,6 +22,12 @@ import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
 import { NodeVideoPlaybackGuard } from './NodeVideoPlaybackGuard'
 import { NodeInlineImageTitle } from './NodeImagePreviewActions'
+import NodeImageEditToolbar from './NodeImageEditToolbar'
+import NodeResultDownloadButton from './NodeResultDownloadButton'
+import { useNodeImageEditing } from './useNodeImageEditing'
+import { applyFixationMakeup } from '../fixation/buildFixationNode'
+import NodeMediaPreviewDialog from './NodeMediaPreviewDialog'
+import ProvenancePanel from './ProvenancePanel'
 import {
   isAudioLikeGenerationNodeKind,
   isImageLikeGenerationNodeKind,
@@ -100,9 +108,25 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
   const status = node.status ?? 'idle'
   const visualSize = React.useMemo(() => resolveNodeVisualSize(node), [node])
 
+  // —— S2 STEP 4 浮动工具条依赖（引擎无关，直接复用老画布 handler）——
+  // 图片编辑状态机（裁剪/切图/变换/抠图）：纯 store + canvas 像素操作，无老画布 DOM/scale 耦合。
+  const imageEditing = useNodeImageEditing(node, visualSize)
+  // 生成记录面板开关。
+  const [provenanceOpen, setProvenanceOpen] = React.useState(false)
+  // 全屏预览（NodeMediaPreviewDialog）：portal 到 .workbench-generation__canvas（react-flow 容器仍挂其内）。
+  const [mediaPreviewOpen, setMediaPreviewOpen] = React.useState(false)
+  const previewUrl = node.result?.url
+  const previewType = node.result?.type === 'image' || node.result?.type === 'video' ? node.result.type : undefined
+  const openMediaPreview = React.useCallback(() => setMediaPreviewOpen(true), [])
+  const closeMediaPreview = React.useCallback(() => setMediaPreviewOpen(false), [])
+
+  const isRemoveBackgroundPending =
+    (node.status === 'queued' || node.status === 'running') && node.progress?.phase === 'remove-background'
+  const isImageResult = node.kind !== 'panorama' && node.result?.type === 'image' && Boolean(node.result.url)
+
   return (
     <>
-      {/* 浮动工具条（react-flow 官方 NodeToolbar，S2 STEP 3/4）：
+      {/* composer（react-flow 官方 NodeToolbar Bottom，S2 STEP 3）：
           NodeToolbar 不随 viewport 缩放（官方实现），默认节点选中显示、多选隐藏（自动处理）。
           composer 用 positionMode="inline"（NodeToolbar 提供恒定尺寸定位，官方建议）。 */}
       <NodeToolbar position={Position.Bottom} offset={12} isVisible={selected}>
@@ -112,22 +136,64 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       </NodeToolbar>
 
       {/* 浮动工具条（react-flow 官方 NodeToolbar Top，S2 STEP 4）：生成后操作。
-          精简版先接「重新生成」（regenerateNodeInPlace，引擎无关）；完整 4 处复用（图片/视频/全景/结果下载）后续扩展。 */}
-      {node.prompt ? (
+          NodeToolbar 提供恒定屏幕尺寸定位；浮条组件 positionMode="inline" 只复用纯按钮（ToolbarButton 等），
+          不走老画布 FloatingToolbarShell 的反缩放定位（D1 定案废弃）。 */}
+      {node.prompt || isImageResult || node.result?.url ? (
         <NodeToolbar position={Position.Top} offset={12} isVisible={selected}>
-          <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-2 py-1 text-caption shadow-nomi-md">
-            <button
-              type="button"
-              className="rounded-nomi px-2 py-0.5 text-nomi-ink transition-colors hover:bg-nomi-accent/10 hover:text-nomi-accent"
-              onClick={() => {
-                void regenerateNodeInPlace(node.id)
-              }}
-            >
-              重新生成
-            </button>
-          </div>
+          <React.Suspense fallback={null}>
+            <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-1.5 py-1 shadow-nomi-md">
+              {/* 图片结果 → 图片编辑浮条（裁剪/AI编辑/画板/下载/生成记录）。 */}
+              {isImageResult ? (
+                <NodeImageEditToolbar
+                  node={node}
+                  editGrid={imageEditing.editGrid}
+                  imageOpBusy={imageEditing.imageOpBusy}
+                  onMakeup={() => applyFixationMakeup(node)}
+                  onGridSplit={(gridSize) => imageEditing.openEdit(gridSize)}
+                  onCrop={() => imageEditing.openEdit(1)}
+                  onTransform={(op) => void imageEditing.handleImageTransform(op)}
+                  onRemoveBackground={() => void imageEditing.handleRemoveBackground()}
+                  removeBackgroundBusy={isRemoveBackgroundPending}
+                  onPreview={openMediaPreview}
+                  onOpenProvenance={() => setProvenanceOpen(true)}
+                  positionMode="inline"
+                />
+              ) : null}
+              {/* 视频/其它非图片结果 → 下载/抽帧浮条（NodeResultDownloadButton 内部按结果类型分发）。
+                  图片结果已走 NodeImageEditToolbar，这里跳过避免重复。 */}
+              {!isImageResult ? (
+                <NodeResultDownloadButton
+                  node={node}
+                  selected={selected}
+                  onPreview={openMediaPreview}
+                  onOpenProvenance={() => setProvenanceOpen(true)}
+                  positionMode="inline"
+                />
+              ) : null}
+              {node.prompt ? (
+                <>
+                  <div className="mx-1 h-5 w-px bg-nomi-line" aria-hidden />
+                  <button
+                    type="button"
+                    className="rounded-nomi px-2 py-0.5 text-caption text-nomi-ink transition-colors hover:bg-nomi-accent/10 hover:text-nomi-accent"
+                    onClick={() => {
+                      void regenerateNodeInPlace(node.id)
+                    }}
+                  >
+                    重新生成
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </React.Suspense>
         </NodeToolbar>
       ) : null}
+
+      {/* 全屏媒体预览 + 生成记录（fixed/portal 全屏，与画布定位无关，放 NodeToolbar 外）。 */}
+      {mediaPreviewOpen && previewUrl && previewType ? (
+        <NodeMediaPreviewDialog mediaType={previewType} url={previewUrl} title={node.title || node.id} onClose={closeMediaPreview} />
+      ) : null}
+      <ProvenancePanel node={node} open={provenanceOpen} onClose={() => setProvenanceOpen(false)} />
 
       <div
         className={cn(

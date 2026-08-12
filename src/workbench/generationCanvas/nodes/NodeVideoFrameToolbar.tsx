@@ -25,9 +25,11 @@ type Props = {
   onPreview: () => void
   /** 生成记录（从卡片右上角迁来）。 */
   onOpenProvenance: () => void
+  /** react-flow 迁移（S2 STEP 4）：inline 时不渲染定位外壳，由 NodeToolbar 提供定位（复用纯按钮）。 */
+  positionMode?: 'absolute-below' | 'inline'
 }
 
-export default function NodeVideoFrameToolbar({ node, downloading, onDownload, onPreview, onOpenProvenance }: Props): JSX.Element {
+export default function NodeVideoFrameToolbar({ node, downloading, onDownload, onPreview, onOpenProvenance, positionMode }: Props): JSX.Element {
   const { t } = useTranslation()
   const [busy, setBusy] = React.useState<'first' | 'last' | null>(null)
   const [shotCutOpen, setShotCutOpen] = React.useState(false)
@@ -39,7 +41,7 @@ export default function NodeVideoFrameToolbar({ node, downloading, onDownload, o
   return (
     <>
     {shotCutOpen ? <NodeShotCutPanel node={node} onClose={() => setShotCutOpen(false)} /> : null}
-    <FloatingToolbarShell ariaLabel={t('generationCommon.videoToolbar.aria')}>
+    <FloatingToolbarShell ariaLabel={t('generationCommon.videoToolbar.aria')} positionMode={positionMode}>
       <ToolbarButton
         icon={<IconPlayerTrackPrev size={I.size} stroke={I.stroke} />}
         label={

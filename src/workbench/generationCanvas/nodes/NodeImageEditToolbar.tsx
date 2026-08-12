@@ -34,9 +34,11 @@ type Props = {
   onOpenProvenance: () => void
   /** Tier1「定妆」：基于当前图建一个预填身份板提示词的新节点（不自动生成）。缺省不渲染该按钮。 */
   onMakeup?: () => void
+  /** react-flow 迁移（S2 STEP 4）：inline 时不渲染定位外壳，由 NodeToolbar 提供定位（复用纯按钮）。 */
+  positionMode?: 'absolute-below' | 'inline'
 }
 
-export default function NodeImageEditToolbar({ node, editGrid, imageOpBusy, onGridSplit, onCrop, onTransform, onRemoveBackground, removeBackgroundBusy = false, onPreview, onOpenProvenance, onMakeup }: Props): JSX.Element {
+export default function NodeImageEditToolbar({ node, editGrid, imageOpBusy, onGridSplit, onCrop, onTransform, onRemoveBackground, removeBackgroundBusy = false, onPreview, onOpenProvenance, onMakeup, positionMode }: Props): JSX.Element {
   const { t } = useTranslation()
   const { downloading, download } = useResultDownload(node)
   const [whiteboardOpen, setWhiteboardOpen] = React.useState(false)
@@ -49,7 +51,7 @@ export default function NodeImageEditToolbar({ node, editGrid, imageOpBusy, onGr
   }, [decomposeState])
   return (
     <>
-      <FloatingToolbarShell ariaLabel={t('generationCommon.imageToolbar.aria')}>
+      <FloatingToolbarShell ariaLabel={t('generationCommon.imageToolbar.aria')} positionMode={positionMode}>
         {onMakeup ? (
           <ToolbarButton
             icon={<IconSparkles size={I.size} stroke={I.stroke} />}
