@@ -411,8 +411,8 @@
 > 目的：给用户/后续 AI 一份**连续可读**的执行进度，尤其记录**关键抉择 + 理由**，便于验收时对照判断。每完成一个 commit/决策，更新本节。
 
 ### 当前状态（截至 2026-08-12）
-- **S1 完成**（容器骨架 + 数据流桥 + 切换开关），commit `782433a` + `abd113a` + `82bca4f`。
-- **S2 进行中**：STEP 1-2 已落地（`673617a`、`2a64ab7`、`43cc7ee`），内容层按 kind 分发，audio/text + image 已接真实 body。
+- **S1 完成**（容器骨架 + 数据流桥 + 切换开关）。
+- **S2 基本完成**：STEP 1-4 + 内容层全部接入。ReactFlowNode 已接全 kind 分发（audio/text/image/video/panorama/scene3d/model3d/card）+ 浮条 4 处（图片/视频/结果下载/全景）+ 裁剪框/结果堆栈 + 失败态。剩 readOnly 透传（当前硬编码 false，S6 分享预览时处理）。
 - 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 保持 false（默认老画布）；迁移期开发态，不中途真机。
 
 ### 关键抉择记录（验收时判断"为什么这么做"的依据）
@@ -434,6 +434,12 @@
 - code-explorer 判定表：多数 body **无 `scale(1/canvasZoom)`**（反缩放封装在更外层 composer/toolbar），是纯 props/store 驱动 → **可直接搬进 react-flow**。
 - 判定分级：可直接复用（`AudioStripNode`/`ImageCropGridOverlay`/`TrajectoryRenderer`）/ 需小改（`ImageResultStack`/`InlineParameterBar`/`NodeErrorReport`/`NodeShotCutPanel`，删 DOM 契约）/ 必须重写（`PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`/`NodeConnectionHandles`）。
 
+**D5｜PanoramaViewer / NodeMediaPreviewDialog 复查为可复用（执行定，2026-08-12）**
+- D4 判定表标「必须重写」的 `PanoramaViewer` / `NodeMediaPreviewDialog`，源码核查**实为可复用**：
+  - `PanoramaViewer`：纯 `width/height/imageUrl` props 驱动，全屏 `createPortal(document.body)` + `fixed inset-0`，无老画布 DOM/scale 耦合。`onEnterFullscreen` 回填浮条 ref（react-flow 下照用）。
+  - `NodeMediaPreviewDialog`：portal 目标 `.workbench-generation__canvas` 在 react-flow 下**仍存在**（`GenerationWorkspace` 的 canvas 挂载 div，react-flow 容器挂其内），无需重写。`NodeShotCutPanel` 同理。
+- 含义：S2 内容层整体为「复用」而非「重写」，降低了原评审估算的工作量。`WhiteboardLeaferCanvas`（leafer 深模块）确认为「只改挂载容器」，不动深模块。
+
 ### 已完成 commit 清单
 | commit | 阶段 | 内容 |
 |---|---|---|
@@ -453,12 +459,19 @@
 | `2209d73` | S2-STEP3 | composer 定位引擎无关化（去 useComposerViewportPlacement 反缩放/翻转/避让 + 删孤儿 hook） |
 | `daabb5a` | S2-STEP3 | composer 完整接入 ReactFlowNode（NodeToolbar 恒定尺寸 + positionMode prop） |
 | `c9d00cc` | S2-STEP4 | 浮条补全：FloatingToolbarShell 加 positionMode="inline" 解耦定位外壳；ReactFlowNode 用 NodeToolbar Top 接图片/视频/结果下载 3 处浮条 |
+| `a8bd00c` | S2-STEP4 | 全景内容层 + 全景浮条接入（PanoramaViewer 复用 + useNodePanoramaHandlers + 全屏/下载/生成记录） |
+| `074f959` | S2-STEP2 | image 内容层补全（ImageResultStackControls 堆栈 + ImageCropGridOverlay 裁剪，图片容器改内容驱动高度） |
+| `57b1ac8` | S2-STEP2 | 剩余 kind 接入（text→TextDocumentNode、scene3d→Scene3DEditor、model3d→Model3DViewer、card→NodeCardBody、失败态→NodeErrorReport） |
+| `803e7d6` | S2 | i18n 门岗清零（ReactFlowNode 占位文案改 i18n，13 literal 减到 0） |
 
 ### 进行中 / 下一步
-- S2 STEP 4：浮条组件加 `positionMode="inline"`（`FloatingToolbarShell` 解耦定位外壳，只复用纯按钮）+ `ReactFlowNode` 用 `NodeToolbar Top` 接入图片/视频/结果下载 3 处。**全景浮条待补**（依赖 PanoramaViewer 内容层 `onEnterFullscreen` ref，S2 剩余 content 接入后一并补）。
-- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用，需接 `useNodeImageEditing` 编辑态）；需小改 `ImageResultStackControls`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`（**全景浮条依赖项**）。`NodeMediaPreviewDialog` 复查：portal 目标 `.workbench-generation__canvas` 在 react-flow 下仍存在（react-flow 容器挂其内），**无需重写**，直接复用。
+- **S2 内容层 + 浮条已全部接入**（commit 见上清单）。剩：
+  1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
+  2. **video 浮条**：已通过 `NodeResultDownloadButton`→`NodeVideoFrameToolbar` 链路生效（抽帧/按镜头拆 `NodeShotCutPanel`），无需额外。
+  3. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer`（已接入）一起复用，不单独接。
+- **下一步 = S3 边渲染**：自定义 Edge（`BaseEdge` + `getBezierPath`）+ 边模式/断开/选中（E3/E4）。连线 Handle（S4）。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
-- **门岗待办**：ReactFlowNode 迁移期占位文案（`内容层（`/`· 有 prompt ·`/`· 空节点 ·`/`重新生成`）触 check:i18n（13 literal，HEAD 基线既有非本次引入），S2 后续 STEP 替换真实内容层时自然消失，不扩大本次 diff。
+- **门岗**：i18n 已清零（`803e7d6`）；filesize 白名单 3 个（`BaseGenerationNode` 超限在白名单，迁移期不处理）；老画布 walk 迁移期可能红（D2 接受）。
 
 ### 验收对照（S2 目标 vs 现状）
 - ✅ 容器渲染真实节点（ReactFlowNode）
@@ -470,8 +483,11 @@
 - ✅ 缩放副作用迁移（NodeResizer onResizeEnd 回写 store.size + 媒体 keepAspectRatio 等比锁）
 - ✅ composer 完整内容（NodeToolbar 恒定尺寸定位，positionMode 双轨）
 - ✅ 浮动工具条：`FloatingToolbarShell` 加 `positionMode="inline"` 解耦定位；`ReactFlowNode` 用 `NodeToolbar Top` 接图片（`NodeImageEditToolbar`）/视频/结果下载（`NodeResultDownloadButton`）3 处
-- ⏳ 浮动工具条：全景 1 处（依赖 PanoramaViewer 内容层）
-- ⏳ image 裁剪、panorama、whiteboard、preview 弹窗（preview 复查：portal 目标 react-flow 下仍有效，无需重写）
+- ✅ 浮动工具条：全景 1 处（PanoramaViewer 内容层 + 全屏/下载/生成记录浮条）
+- ✅ image 裁剪（ImageCropGridOverlay）+ 结果堆栈（ImageResultStackControls）
+- ✅ 剩余 kind：text/scene3d/model3d/card/NodeErrorReport 接入
+- ✅ panorama 内容层（PanoramaViewer，D5 复查可复用）
+- ⏳ readOnly 透传（当前硬编码 false，S6 处理）
 - ⏳ 连线 Handle（S4）
 
 ---
