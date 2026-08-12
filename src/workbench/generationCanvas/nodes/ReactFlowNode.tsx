@@ -11,7 +11,9 @@
 import React from 'react'
 import { Handle, NodeResizer, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '../../../utils/cn'
+import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
+import { resolveNodeVisualSize } from './nodeSizing'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
@@ -22,6 +24,8 @@ import {
   isImageLikeGenerationNodeKind,
   isVideoLikeGenerationNodeKind,
 } from '../model/generationNodeKinds'
+
+const NodeGenerationComposer = lazyWithChunkBoundary('节点生成面板', () => import('./NodeGenerationComposer'))
 
 /** 节点状态徽标文案映射（skeleton，内容层细化在后续 STEP）。 */
 const STATUS_TEXT: Record<string, string> = {
@@ -93,15 +97,17 @@ function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode'], selected: b
 export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactFlowNode>): JSX.Element {
   const node = data.nomiNode
   const status = node.status ?? 'idle'
+  const visualSize = React.useMemo(() => resolveNodeVisualSize(node), [node])
 
   return (
     <>
-      {/* 浮动工具条（react-flow 官方 NodeToolbar，STEP 4 完整接入；现放生成入口占位验证定位机制）：
-          NodeToolbar 不随 viewport 缩放（官方实现），默认节点选中显示、多选隐藏（自动处理）。 */}
+      {/* 浮动工具条（react-flow 官方 NodeToolbar，S2 STEP 3/4）：
+          NodeToolbar 不随 viewport 缩放（官方实现），默认节点选中显示、多选隐藏（自动处理）。
+          composer 用 positionMode="inline"（NodeToolbar 提供恒定尺寸定位，官方建议）。 */}
       <NodeToolbar position={Position.Bottom} offset={12} isVisible={selected}>
-        <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-2 py-1 text-caption shadow-nomi-md">
-          <span className="text-nomi-ink-45">生成</span>
-        </div>
+        <React.Suspense fallback={null}>
+          <NodeGenerationComposer node={node} visualSize={visualSize} positionMode="inline" />
+        </React.Suspense>
       </NodeToolbar>
 
       <div

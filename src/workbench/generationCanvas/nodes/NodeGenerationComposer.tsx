@@ -76,6 +76,12 @@ type PromptPickerPosition = {
 type Props = {
   node: GenerationCanvasNode
   visualSize: { width: number; height: number }
+  /**
+   * 定位模式（S2 STEP 3 接入 react-flow）：
+   * - 'absolute-below'（默认）：节点下方 absolute 浮层（老画布 BaseGenerationNode 语义，不变）。
+   * - 'inline'：不定位，在调用方容器内正常流（react-flow 用 NodeToolbar 官方恒定尺寸定位包裹）。
+   */
+  positionMode?: 'absolute-below' | 'inline'
 }
 
 type FloatingComposerLayout = {
@@ -241,7 +247,7 @@ function BrowserPromptPickerPopover({
   )
 }
 
-export default function NodeGenerationComposer({ node, visualSize }: Props): JSX.Element {
+export default function NodeGenerationComposer({ node, visualSize, positionMode = 'absolute-below' }: Props): JSX.Element {
   const { t } = useTranslation()
   const updateNode = useGenerationCanvasStore((state) => state.updateNode)
   const status = node.status || 'idle'
@@ -469,13 +475,16 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   return (
     // 外层只做定位锚（不裁剪）。定位引擎无关化（S2 STEP 3）：
     // 去掉自研 viewport 反缩放（scale(1/canvasZoom)）/翻转（flipUp）/避让（aboveClearance）/夹取（shiftX）/
-    // group-data-[dragging] 隐身——全部是 react-flow 无的 DOM 契约。react-flow 下由 NodeToolbar 官方接管定位；
-    // 本组件仅保持"节点下方居中"的简单定位（absolute top-full），供两种引擎共用。
+    // group-data-[dragging] 隐身——全部是 react-flow 无的 DOM 契约。
+    // - 'absolute-below'：节点下方居中（老画布语义，默认）
+    // - 'inline'：调用方容器内正常流（react-flow 用 NodeToolbar 官方恒定尺寸定位包裹）
     <div
       className={cn(
         'generation-canvas-v2-node__composer',
-        'absolute left-1/2 top-full z-[8] w-max -translate-x-1/2',
-        `mt-[${composerLayout.gap}px]`,
+        positionMode === 'inline'
+          ? 'relative w-full'
+          : 'absolute left-1/2 top-full z-[8] w-max -translate-x-1/2',
+        positionMode !== 'inline' && `mt-[${composerLayout.gap}px]`,
       )}
       style={{ cursor: 'default', userSelect: 'auto', touchAction: 'auto' }}
       onPointerDown={(event) => event.stopPropagation()}
