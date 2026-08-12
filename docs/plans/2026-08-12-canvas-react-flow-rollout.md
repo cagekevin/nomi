@@ -285,12 +285,60 @@
 - **验证**：文本节点（矮）/图片带结果（高）/音视频节点，各自高度正确；连线锚点贴实际边缘；auto-fit 框住完整节点。
 - **副作用**：S1 桥测试里"塞 height"的断言（`toReactFlowNode` 传 width+height）要同步改为只断言 width。
 
-**S2 的最终验收清单（STEP 1-4 + C1/B6）**
+**补强 6｜STEP 1 安全边界（已被补强 7 定案覆盖，本节仅保留仍有效的分析）**
+
+> **⚠️ 裁决更新**：本节原主张"不能直接改 `BaseGenerationNode`、必须先拆壳"，已被 **补强 7 用户拍板推翻**——接受老画布兼容性下降，**直接改 `BaseGenerationNode` 为 react-flow 自定义节点**，不拆壳、不做引擎无关定位层。本节的源码证据（props 契约/16 kind 共享外壳/内容层反缩放）仍有效，但**结论已改为"直接改"**。
+
+> 本节是 S2 STEP 1 的强制前置。经源码核查发现：直接改 `BaseGenerationNode` 用 react-flow `NodeProps` 是**不可行**的（会 break 老画布），必须先做「拆壳」。
+
+**现状核实（双轨安全矛盾的根源）**：
+- `BaseGenerationNode.tsx:67-73` 定义自定义 props `{node, selected, readOnly, focusFlash, appear}`（**不是** react-flow `NodeProps`）。
+- `registry.ts:52-251`：**全部 16 kind 的 `component` 都 `loadBaseGenerationNode`**（同一个外壳，内部按 `renderKind` 分发 body）。`getGenerationNodeComponent(kind)` 返回的都是它。
+- 老画布 `GenerationCanvas.tsx:695-704` 传 `{node, selected, readOnly, focusFlash, appear}` 调用它。
+- `BaseGenerationNodeImpl`（952 行）把**渲染引擎专属**与**内容渲染**硬耦合在同一文件：
+  - 引擎专属：L275-300 根 `article` 的 `absolute` + `transform: translate(position)` + 自研 `onPointerDown/Move/Up`（`useNodeDragResize` L203-216）+ `visualSize` 尺寸 + `data-*` 契约；L301-324 自研 `MagneticConnectionHandle`。
+  - 内容渲染：L327 起 media/preview/composer/参数条/provenance/图片编辑等，**纯 store 驱动，引擎无关**。
+
+**结论（为什么不能直接改）**：若把 `BaseGenerationNode` 改成消费 `NodeProps`（`data.nomiNode`），老画布 `GenerationCanvas.tsx:697-704` 立刻 break（props 形状全变），16 kind 全挂。
+
+**~~修正：STEP 1 强制前置 = 「拆壳」，不是「改壳」~~（已废弃，见补强 7 定案：直接改 `BaseGenerationNode` 为 react-flow 节点，不拆壳、不做引擎无关定位层。）**
+
+**补强 7｜「拆壳=纯重构」被源码证伪，内容层是重写不是切分（本轮审计新增，2026-08-12）**
+
+> 补强 6 的前提"拆壳=机械切分内容内核、老画布零变化"经源码核查**不成立**。真相：内容层浮动面板**深度绑定自研渲染语义**，不是引擎无关的可切分内核。特此记录，避免后续执行 AI 按"纯重构"误判。
+
+**源码证据（内容层反缩放 + 视口定位 = 自研渲染专属）**：
+- `NodeGenerationComposer.tsx:483` `group-data-[dragging=true]/canvas:invisible`；`:491` `transform: scale(1/canvasZoom)` 反向缩放抵消画布 zoom → **面板恒定屏幕尺寸**。
+- `NodeFloatingToolbar.tsx:28` `group-data-[dragging=true]/canvas`；`:31` `scale(1/canvasZoom)`。
+- `ImageResultStack.tsx:122` `group-data-[dragging=true]/canvas:invisible`。
+- `useComposerViewportPlacement.ts:38-108` composer 定位依赖 `canvasZoom` + 老画布 DOM 几何（stage/timeline 句柄）。
+
+**为什么这些是"自研专属"**：react-flow 12 **无 `group-data-[dragging=true]/canvas` DOM 契约、无 CSS 反缩放机制**。浮动面板定位由 `NodeToolbar`/viewport 计算接管。所以这些内容项**无法原样保留**，必须重写定位逻辑。
+
+**结论（用户拍板 2026-08-12，最终定案）**：
+1. **不保留"固定尺寸"（CSS 反缩放）体验**，浮动工具条/composer 按 **react-flow 官方建议**做（`NodeToolbar` 随节点定位缩放，或 `Panel` 屏幕固定层）。删 3 处反缩放（`NodeGenerationComposer.tsx:483,491` / `NodeFloatingToolbar.tsx:28,31` / `ImageResultStack.tsx:122`）+ composer 视口定位（`useComposerViewportPlacement.ts`）。
+2. **接受老画布兼容性下降**——老画布是过渡产品，最终会删（S7）。因此**不做"引擎无关定位层"抽象**，内容层直接按 react-flow 方向重写（用 `NodeToolbar` 等官方组件）。
+3. **含义**：补强 6 的"禁止直接改 `BaseGenerationNode` props 契约"**解除**——既然老画布兼容性可下降，`BaseGenerationNode` 可直接改造为 react-flow 自定义节点（`NodeProps` 契约），不必保留老画布 props 契约。老画布代码保留但功能契约可能回归，迁移期开发态接受，S7 删老画布后一致。
+4. **取舍**：放弃"画布缩小看全局时工具条恒可点"旧体验；老画布 walk/e2e 门岗在 S2-S6 可能变红，接受（开发态不真机用，最终以 react-flow 画布验收为准）。**硬红线保留**：store 坐标语义不变（§四.5）、IPC/桥/门岗不含画布功能的仍全过。
+
+**S2 的最终验收清单（STEP 1-4 + C1/B6，按定案修订）**
 1. 各 kind 节点在 react-flow 容器显示（16 kind，含 leafer/three 深模块挂载容器透传 `NodeProps`）。
 2. 拖拽无抖动/漂移；松手位置正确；undo 一次入栈（补强 3 验证不重渲）。
 3. 8 向缩放 + 等比锁 + west/north position 反推正确（`onResize` 移植）。
-4. composer/参数条随节点/缩放/切分类不漂移、翻转正确、不被 timeline 遮挡（STEP 3）。
-5. 浮条拖拽隐身、松手恢复、贴边方向正确（STEP 4，`setCanvasDragging` 驱动）。
+4. composer/参数条随节点/缩放/切分类不漂移、翻转正确（STEP 3）。**不再要求"恒定屏幕尺寸"**（定案废弃 CSS 反缩放）；定位由 `NodeToolbar`/viewport 计算，react-flow 标准行为。
+5. 浮条用 `NodeToolbar`（react-flow 原生）定位，随节点缩放（**不反缩放**）；拖拽中浮条行为按 react-flow 语义验收（STEP 4）。
+
+**S2 STEP 1 修订执行方案（按定案：直接改 `BaseGenerationNode`，不拆壳）**
+> 定案后 STEP 1 = 把 `BaseGenerationNode` 直接改造成 react-flow 自定义节点。**不接受老画布 walk/e2e 兼容**（红可接受，S7 删老画布后一致）。改造点锚定行号如下：
+- **props 契约**：`BaseGenerationNode.tsx:67-73` 自定义 props → `NodeProps<NomiReactFlowNode>`（`data.nomiNode`/`selected`/`dragging`/`positionAbsolute`）。
+- **删自研 transform**：L289-290 `transform: translate(position)` → 移除（react-flow 管节点 transform）；根元素改 `position:relative`。
+- **删自研拖拽**：L295-297 `onPointerDown/Move/Up` + `useNodeDragResize`(L203-216) → 移除，改 react-flow `onNodeDrag/onNodeDragStop`（容器层）+ 桥回写（STEP 2 做）。
+- **删自研 resize 热区**：L689-717 → 改 react-flow `<NodeResizer>`（STEP 2 做，S2 验收第 3 项）。
+- **删自研连接手柄**：L301-372 `MagneticConnectionHandle` → 改 react-flow `<Handle>`（**S4 做**，S2 阶段节点暂无线）。
+- **删反缩放**：内容层 3 处（`NodeGenerationComposer.tsx:483,491` / `NodeFloatingToolbar.tsx:28,31` / `ImageResultStack.tsx:122`）`scale(1/canvasZoom)` + `group-data-[dragging]` → 移除。
+- **废弃 composer 视口定位**：`useComposerViewportPlacement.ts` → 改用 `NodeToolbar`（react-flow 原生，S2 STEP 3）。
+- **nodeTypes 注册**：容器 `ReactFlowGenerationCanvas` 的 nodeTypes 注册 `BaseGenerationNode`（S2 STEP 1 收尾）。
+- **老画布处理**：`GenerationCanvas.tsx:695-704` 调用 props 契约被破坏 → **老画布 walk/e2e 兼容性下降，红可接受**（定案）。老画布代码保留到 S7 删。
 6. 添加工具栏建节点落点 = 触发处 client→flow 坐标（补强 4）。
 7. 出现动画（F6）、内容层 LOD 分流不破坏（F7）。
 
