@@ -511,7 +511,9 @@
   1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
   2. **video 浮条**：已通过 `NodeResultDownloadButton`→`NodeVideoFrameToolbar` 链路生效（抽帧/按镜头拆 `NodeShotCutPanel`），无需额外。
   3. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer`（已接入）一起复用，不单独接。
-- **下一步 = S4 剩余**：F8 完整（isValidConnection 校验 + completeNodeConnection 反馈）、F9 组框连整组（connectToGroup + onConnectEnd 命中组框）、F10 出端口选择层重写。
+- **S4 进度**：D1 右键 ✅ / D2 放空 ✅ / A4-A6 内建 ✅ / F8 连线校验 ✅（isValidConnection，D11）。
+- **下一步 = S4 剩余 F9/F10（重写级）**：F9 组框连整组（connectToGroup 依赖 pending 语义，react-flow 需 onConnectEnd 命中组框重新实现）、F10 出端口选择层重写。
+- **⚠️ 暂停点（2026-08-12）**：F9/F10 是高复杂重写 + 依赖真机验证（组框命中/端口交互），且当前 react-flow 画布**无自动化 walk**（现有 walk 绑老画布 DOM）。**建议先真机拉起 react-flow 画布走查 S3/S4 已提交增量**（右键/放空/连线/边模式确认符合预期），再继续 F9/F10。已提交 5 个可回退 commit，门岗全绿，不碰老画布。
 - **S5 预告**：B1 变换同步（store.canvasZoom/Offset）+ B2 多分类 viewport 记忆（D10 已定一起做）+ B3 自动 fit + C5 minimap/缩放条 + G4/G5 + F7 LOD。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
 - **门岗**：i18n 已清零（`803e7d6`）；filesize 白名单 3 个（`BaseGenerationNode` 超限在白名单，迁移期不处理）；老画布 walk 迁移期可能红（D2 接受）。
