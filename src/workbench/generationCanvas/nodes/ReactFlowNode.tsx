@@ -27,6 +27,7 @@ import { NodeInlineImageTitle } from './NodeImagePreviewActions'
 import NodeImageEditToolbar from './NodeImageEditToolbar'
 import NodeResultDownloadButton from './NodeResultDownloadButton'
 import { useNodeImageEditing } from './useNodeImageEditing'
+import { useNodeReadOnly } from './NodeReadOnlyContext'
 import { applyFixationMakeup } from '../fixation/buildFixationNode'
 import NodeMediaPreviewDialog from './NodeMediaPreviewDialog'
 import ProvenancePanel from './ProvenancePanel'
@@ -235,6 +236,8 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
   const node = data.nomiNode
   const status = node.status ?? 'idle'
   const visualSize = React.useMemo(() => resolveNodeVisualSize(node), [node])
+  // S6-readOnly 透传：读容器 Provider（NodeReadOnlyContext），替代原硬编码 false。
+  const nodeReadOnly = useNodeReadOnly()
 
   // —— S2 STEP 4 浮动工具条依赖（引擎无关，直接复用老画布 handler）——
   // 图片编辑状态机（裁剪/切图/变换/抠图）：纯 store + canvas 像素操作，无老画布 DOM/scale 耦合。
@@ -424,7 +427,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           onCropCancel: () => imageEditing.cancelEdit(),
           imageStackOpen,
           onImageStackOpenChange: setImageStackOpen,
-          readOnly: false,
+          readOnly: nodeReadOnly,
           pendingText: t('generationCommon.lightweightNode.idle'),
         }, visualSize)}
       </div>

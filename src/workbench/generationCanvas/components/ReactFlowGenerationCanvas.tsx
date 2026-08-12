@@ -22,7 +22,15 @@ import { CanvasEmptyState } from './CanvasEmptyState'
 import { ReactFlowGroupFrameOverlay } from './ReactFlowGroupFrameOverlay'
 import { getCanvasGroupBoxes } from './generationCanvasGeometry'
 import { CanvasNavigationStack } from './CanvasNavigationStack'
+import { CanvasSelectionToolbar } from './CanvasSelectionToolbar'
+import { CanvasBatchGenerateDock } from './CanvasBatchGenerateDock'
 import { useTidyCanvas } from './useTidyCanvas'
+import { useCanvasGroupActions } from './useCanvasGroupActions'
+import { useCanvasProductionActions } from './useCanvasProductionActions'
+import { useCanvasShortcuts } from './useCanvasShortcuts'
+import { getSelectedBounds } from './generationCanvasGeometry'
+import { NodeReadOnlyContext } from '../nodes/NodeReadOnlyContext'
+import { FOCUS_GENERATION_NODE_EVENT } from '../nodes/nodeSizing'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
@@ -52,6 +60,9 @@ const edgeTypes: EdgeTypes = {
   default: ReactFlowEdge,
 }
 
+/** S6-C3 多选工具条定位常量（对齐老画布 GenerationCanvas.tsx:73，选区上方偏移）。 */
+const MULTI_SELECTION_TOOLBAR_OFFSET = 58
+
 /**
  * S4-F9 拖线命中组框空白（组内非节点区域）→ 返回 groupId，否则 null。
  * 复刻老画布 useDragToConnect.findConnectionTargetGroupId（纯函数：elementsFromPoint + [data-group-id]）。
@@ -80,7 +91,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const activeCategoryId = useWorkbenchStore((state) => state.activeCategoryId)
   // S4-B5：client → canvas 坐标换算（react-flow 官方，替代老画布 getCanvasPointFromClientPoint 自研换算）。
   // canvas → screen 用于菜单 DOM 定位（NodeAddMenu 是 absolute 屏幕定位，需相对容器的 screen 坐标）。
-  const { screenToFlowPosition, flowToScreenPosition, setViewport, fitView, zoomTo, setCenter } = useReactFlow()
+  const { screenToFlowPosition, flowToScreenPosition, setViewport, fitView, zoomTo, zoomIn, zoomOut, setCenter } = useReactFlow()
 
   // S5-B1 变换同步（react-flow → store）：react-flow viewport 为运行时真源，store.canvasZoom/Offset 仅镜像。
   // onChange 平移节流 100ms 写 store（防每帧 store 风暴，老画布 useCanvasTransformStoreSync 同思想）；
@@ -373,6 +384,85 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
     tidy(1.8)
   }, [tidy])
 
+  // S6-C3 多选工具条：selectedGroupIds 派生（groups 里成员全部被选）+ selectedBounds（flow 坐标，定位用）。
+  const selectedGroupIds = React.useMemo(
+    () =>
+      groups
+        .filter((group) => {
+          const memberIds = group.nodeIds.filter((nodeId) => nodes.some((n) => n.id === nodeId))
+          return memberIds.length > 0 && memberIds.every((id) => selectedNodeIds.includes(id))
+        })
+        .map((group) => group.id),
+    [groups, nodes, selectedNodeIds],
+  )
+  const selectedBounds = React.useMemo(() => getSelectedBounds(nodes, selectedNodeIds), [nodes, selectedNodeIds])
+
+  // S6-E1 成组 + E2 批量（纯 store，复用）。
+  const groupActions = useCanvasGroupActions({ activeCategoryId, selectedGroupIds, selectedNodeIds })
+  const production = useCanvasProductionActions({ activeCategoryId, selectedNodeIds })
+
+  // S6-C3 定位：flow 坐标 → 容器内屏幕坐标（flowToScreenPosition 是视口绝对，需减容器 origin）。
+  const selectionToolbarStyle = React.useMemo(() => {
+    if (selectedNodeIds.length <= 1 || !selectedBounds) return null
+    const cx = selectedBounds.minX + selectedBounds.width / 2
+    const topY = selectedBounds.minY - MULTI_SELECTION_TOOLBAR_OFFSET
+    const screen = flowToScreenPosition({ x: cx, y: topY })
+    const rect = canvasRef.current?.getBoundingClientRect()
+    if (!rect) return null
+    return { left: screen.x - rect.left, top: screen.y - rect.top }
+  }, [selectedNodeIds.length, selectedBounds, flowToScreenPosition])
+
+  // S6-G2 聚焦：FOCUS_GENERATION_NODE_EVENT → 切分类 + selectNode + setCenter 定位。
+  React.useEffect(() => {
+    const handleFocusNode = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId?: unknown }>).detail
+      const nodeId = typeof detail?.nodeId === 'string' ? detail.nodeId : ''
+      if (!nodeId) return
+      const target = useGenerationCanvasStore.getState().nodes.find((n) => n.id === nodeId)
+      if (!target) return
+      const targetCategoryId = target.categoryId || 'shots'
+      useWorkbenchStore.getState().setActiveCategoryId(targetCategoryId)
+      useGenerationCanvasStore.getState().selectNode(nodeId)
+      const size = useGenerationCanvasStore.getState().canvasZoom || 1
+      void setCenter(target.position.x + (target.size?.width ?? 220) / 2, target.position.y + (target.size?.height ?? 120) / 2, { zoom: size })
+    }
+    window.addEventListener(FOCUS_GENERATION_NODE_EVENT, handleFocusNode)
+    return () => window.removeEventListener(FOCUS_GENERATION_NODE_EVENT, handleFocusNode)
+  }, [setCenter])
+
+  // S6-D5 快捷键：复用老画布 useCanvasShortcuts（业务键 Cmd+C/X/V/Z、Cmd+G 成组、Escape 清选区等）。
+  // delete 由 react-flow 内建 deleteKeyCode 处理（onNodesChange remove → store.deleteNode，已接通），
+  // useCanvasShortcuts 不重复处理删除。stageRef 换容器 canvasRef（判画布隐藏守卫，评审点 5 真机验）。
+  const deleteSelectedNodes = useGenerationCanvasStore((state) => state.deleteSelectedNodes)
+  const copySelectedNodes = useGenerationCanvasStore((state) => state.copySelectedNodes)
+  const cutSelectedNodes = useGenerationCanvasStore((state) => state.cutSelectedNodes)
+  const pasteNodes = useGenerationCanvasStore((state) => state.pasteNodes)
+  const cancelConnection = useGenerationCanvasStore((state) => state.cancelConnection)
+  const undo = useGenerationCanvasStore((state) => state.undo)
+  const redo = useGenerationCanvasStore((state) => state.redo)
+  useCanvasShortcuts({
+    readOnly,
+    stageRef: canvasRef,
+    selectedNodeCount: selectedNodeIds.length,
+    selectedGroupCount: selectedGroupIds.length,
+    activeCategoryId,
+    setActiveEdge: () => {}, // react-flow 无边选中态（边选区在 react-flow 侧），置空。
+    cancelConnection,
+    deleteSelectedNodes,
+    groupSelectedNodes: groupActions.handleGroupSelectedNodes,
+    ungroupSelectedNodes: groupActions.handleUngroupSelectedNodes,
+    copySelectedNodes,
+    cutSelectedNodes,
+    pasteNodes,
+    getPastePosition: getInsertionPosition,
+    zoomByStep: (direction) => {
+      if (direction > 0) void zoomIn({ duration: 0 })
+      else void zoomOut({ duration: 0 })
+    },
+    undo,
+    redo,
+  })
+
   // 回写半程：react-flow 事件 → 桥 → store。
   const handleNodesChange = React.useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
@@ -439,6 +529,8 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
       data-nomi-generation-canvas-import-target={!readOnly ? 'true' : undefined}
     >
       <div ref={canvasRef} className="relative w-full h-full min-w-0 min-h-0">
+        {/* S6-readOnly 透传：Provider 把容器 readOnly 传给 ReactFlowNode（NodeProps 不携带）。 */}
+        <NodeReadOnlyContext.Provider value={readOnly}>
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
@@ -458,6 +550,8 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           // S4-A4/A5/A6：react-flow 内建交互，显式配置对齐老画布行为——
           // 框选键 Shift（追加）、连线预览线贝塞尔（自研 rAF 预览线由 react-flow connection line 接管）。
           selectionKeyCode="Shift"
+          // S6-D5 删除键：react-flow 内建（对齐老画布 Delete）。onNodesChange remove → store.deleteNode 已接通。
+          deleteKeyCode="Delete"
           connectionLineType={ConnectionLineType.Bezier}
           connectionMode={ConnectionMode.Loose}
           // S1 空容器不 fitView（初始 viewport {0,0,1}，保证 stage 坐标 == canvas 坐标）；
@@ -497,6 +591,34 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           onZoomTo={handleZoomTo}
           onTidy={handleTidy}
         />
+        {/* S6-C3 多选工具条：>1 选中且定位有效时显示，定位在选区上方（容器内屏幕坐标）。 */}
+        {selectionToolbarStyle && !readOnly ? (
+          <CanvasSelectionToolbar
+            selectedCount={selectedNodeIds.length}
+            selectedGroupCount={selectedGroupIds.length}
+            transform={`translate(${Math.round(selectionToolbarStyle.left)}px, ${Math.round(selectionToolbarStyle.top)}px) translateX(-50%)`}
+            eligibleCount={production.eligibleIds.length}
+            executionGroups={production.executionGroups}
+            concurrency={production.concurrency}
+            contactSheetCount={groupActions.contactSheetCount}
+            onConcurrencyChange={production.setConcurrency}
+            onGenerate={production.generate}
+            onApplyModel={production.applyModel}
+            onGroupSelectedNodes={groupActions.handleGroupSelectedNodes}
+            onUngroupSelectedNodes={groupActions.handleUngroupSelectedNodes}
+            onBuildContactSheet={groupActions.handleBuildContactSheet}
+            onClearSelection={() => useGenerationCanvasStore.getState().selectNodes([])}
+          />
+        ) : null}
+        {/* S6-C4 批量 dock：底部居中（对齐老画布，无选中时按分类 scope）。 */}
+        {!readOnly ? (
+          <CanvasBatchGenerateDock
+            eligibleIds={production.eligibleIds}
+            concurrency={production.concurrency}
+            setConcurrency={production.setConcurrency}
+            generate={production.generate}
+          />
+        ) : null}
         {!readOnly ? (
           <CanvasToolbar getInsertionPosition={getInsertionPosition} categoryId={activeCategoryId} />
         ) : null}
@@ -533,6 +655,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
             onAddNode={handleAddConnectedNode}
           />
         ) : null}
+        </NodeReadOnlyContext.Provider>
       </div>
     </section>
   )
