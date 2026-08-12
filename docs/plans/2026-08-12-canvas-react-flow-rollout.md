@@ -513,7 +513,9 @@
   3. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer`（已接入）一起复用，不单独接。
 - **S4 进度**：D1 右键 ✅ / D2 放空 ✅ / A4-A6 内建 ✅ / F8 连线校验 ✅（isValidConnection，D11）。
 - **下一步 = S4 剩余 F9/F10（重写级）**：F9 组框连整组（connectToGroup 依赖 pending 语义，react-flow 需 onConnectEnd 命中组框重新实现）、F10 出端口选择层重写。
-- **⚠️ 暂停点（2026-08-12）**：F9/F10 是高复杂重写 + 依赖真机验证（组框命中/端口交互），且当前 react-flow 画布**无自动化 walk**（现有 walk 绑老画布 DOM）。**建议先真机拉起 react-flow 画布走查 S3/S4 已提交增量**（右键/放空/连线/边模式确认符合预期），再继续 F9/F10。已提交 5 个可回退 commit，门岗全绿，不碰老画布。
+- **✅ 暂停点解除（2026-08-12）**：新增 `tests/ux/canvas-react-flow-smoke.walk.mjs`（react-flow 画布真机自动化基线，10 项断言全绿）。验证了 S3/S4 核心增量真机可用：react-flow 容器出现、空态 CTA 建节点、右键菜单（D1）建节点 + 关闭、零页面错误。
+- **已知问题（待修）**：ReactFlowNode 选中视觉态在 react-flow 画布未生效——`selected && 'border-nomi-accent ring-2 ring-nomi-accent/30'`（ReactFlowNode L365）的 Tailwind JIT 动态拼接类未扫到/未编译，wrapper `.selected` 也未出现（react-flow custom node 选中态传递待核）。不影响功能逻辑（store `selectedNodeIds` 仍正确），仅视觉。**建议放到 S8 测试迁移/真机走查阶段修复**。
+- **下一步**：F9 组框连整组（connectToGroup + onConnectEnd 命中组框）+ F10 出端口选择层重写。真机基线已立，可继续。
 - **S5 预告**：B1 变换同步（store.canvasZoom/Offset）+ B2 多分类 viewport 记忆（D10 已定一起做）+ B3 自动 fit + C5 minimap/缩放条 + G4/G5 + F7 LOD。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
 - **门岗**：i18n 已清零（`803e7d6`）；filesize 白名单 3 个（`BaseGenerationNode` 超限在白名单，迁移期不处理）；老画布 walk 迁移期可能红（D2 接受）。
