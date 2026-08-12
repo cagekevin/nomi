@@ -9,7 +9,7 @@
 // - 预留 Handle 骨架（连线在 S4 接）
 // - 内容层（media/composer/参数条）后续按官方机制（NodeToolbar 等）逐步扩展
 import React from 'react'
-import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
+import { Handle, NodeResizer, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '../../../utils/cn'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
@@ -94,17 +94,26 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
   const status = node.status ?? 'idle'
 
   return (
-    <div
-      className={cn(
-        'generation-canvas-v2-node',
-        'relative rounded-nomi border bg-nomi-paper shadow-nomi-md',
-        'text-body-sm text-nomi-ink',
-        selected && 'border-nomi-accent ring-2 ring-nomi-accent/30',
-        dragging && 'opacity-70',
-      )}
-      data-node-id={node.id}
-      style={{ width: node.size?.width ?? 220 }}
-    >
+    <>
+      {/* 浮动工具条（react-flow 官方 NodeToolbar，STEP 4 完整接入；现放生成入口占位验证定位机制）：
+          NodeToolbar 不随 viewport 缩放（官方实现），默认节点选中显示、多选隐藏（自动处理）。 */}
+      <NodeToolbar position={Position.Bottom} offset={12} isVisible={selected}>
+        <div className="flex items-center gap-1 rounded-nomi border border-nomi-line bg-nomi-paper px-2 py-1 text-caption shadow-nomi-md">
+          <span className="text-nomi-ink-45">生成</span>
+        </div>
+      </NodeToolbar>
+
+      <div
+        className={cn(
+          'generation-canvas-v2-node',
+          'relative rounded-nomi border bg-nomi-paper shadow-nomi-md',
+          'text-body-sm text-nomi-ink',
+          selected && 'border-nomi-accent ring-2 ring-nomi-accent/30',
+          dragging && 'opacity-70',
+        )}
+        data-node-id={node.id}
+        style={{ width: node.size?.width ?? 220 }}
+      >
       {/* 8 向缩放（react-flow 官方，替代自研 resize 热区；S2 STEP 2 接 Aspect 锁比） */}
       <NodeResizer
         isVisible={selected}
@@ -150,7 +159,8 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           />
         </div>
       ) : null}
-    </div>
+      </div>
+    </>
   )
 }
 
