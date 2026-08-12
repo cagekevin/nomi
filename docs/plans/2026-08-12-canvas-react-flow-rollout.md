@@ -513,6 +513,7 @@
 | （未提交）| 机制 | 原版对齐自查 walk（canvas-react-flow-parity.walk.mjs，23 断言） |
 
 ### 进行中 / 下一步
+- **✅ S4-F9 组框连整组代码就位（2026-08-12）**：react-flow 容器渲染组框（`ReactFlowGroupFrameOverlay`，useViewport 同步 transform）+ `onConnectEnd` 加"命中组框空白→startConnection+connectToGroup"分支（复刻老画布 findConnectionTargetGroupId）。typecheck/build/test（4121）/parity walk（23）全绿。**完整真机连整组依赖 S6 成组入口**（当前无 UI 建 group，S6 C3 多选工具条含成组按钮），S4 已做到代码就位+无回归。
 - **✅ 白边/错位已修（2026-08-12，commit `c165d32`）**：react-flow 给自定义节点 wrapper（`.react-flow__node-default`）强加内置 default 节点的视觉（`background:#fff / border:1px solid #1a192b / padding:10px`），使 wrapper 比内部根 div 大一圈 → 白底外露 + 内容被 padding 偏移（实测 wrapper 与 inner 错位 11px）。**修**：新建 `styles/reactFlowOverrides.css` 清掉 wrapper 默认视觉，容器紧随官方 style.css 之后 import。实测修复后 wrapper 与 inner 几何完全重合。
 - **✅ 原版对齐自查机制（2026-08-12）**：`tests/ux/canvas-react-flow-parity.walk.mjs`（23 项断言全绿），把「活不仔细/和原版差别大」变成自动化断言：wrapper 几何==inner（防白边）、wrapper 无默认白底/边框/padding、i18n key 无泄漏、pending 占位来自 i18n、工具栏≥4 按钮、渲染宽=整数。**跑法**：`VITE_RENDER_CANVAS_WITH_REACT_FLOW=true pnpm run build && node tests/ux/canvas-react-flow-parity.walk.mjs`。**教训**：基线不能拍脑袋（曾把 image 节点宽臆断为 220，实为 registry defaultSize 340），必须读老画布源码/实测。
 - **S3 已接入**、**S4 部分接入**（D1/D2/A4-A6）。剩：

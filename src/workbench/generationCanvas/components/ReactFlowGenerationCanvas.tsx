@@ -19,6 +19,8 @@ import { ReactFlowNode } from '../nodes/ReactFlowNode'
 import ReactFlowEdge from './ReactFlowEdge'
 import CanvasToolbar, { NodeAddMenu } from './CanvasToolbar'
 import { CanvasEmptyState } from './CanvasEmptyState'
+import { ReactFlowGroupFrameOverlay } from './ReactFlowGroupFrameOverlay'
+import { getCanvasGroupBoxes } from './generationCanvasGeometry'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
@@ -48,6 +50,19 @@ const edgeTypes: EdgeTypes = {
   default: ReactFlowEdge,
 }
 
+/**
+ * S4-F9 拖线命中组框空白（组内非节点区域）→ 返回 groupId，否则 null。
+ * 复刻老画布 useDragToConnect.findConnectionTargetGroupId（纯函数：elementsFromPoint + [data-group-id]）。
+ * 优先级：节点 > 组框空白 > 画布空白（react-flow onConnectEnd 里 toNode!=null 已先走节点，这里只补组框）。
+ */
+function findConnectionTargetGroupId(clientX: number, clientY: number): string | null {
+  for (const hit of document.elementsFromPoint(clientX, clientY)) {
+    const groupId = hit.closest<HTMLElement>('[data-group-id]')?.dataset.groupId
+    if (groupId) return groupId
+  }
+  return null
+}
+
 /** S1 容器：包 ReactFlowProvider，供后续 screenToFlowPosition 等（S4/S5）。 */
 function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boolean }): JSX.Element {
   const { t } = useTranslation()
@@ -55,6 +70,10 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const markReady = useGenerationCanvasStore((state) => state.markReady)
   const allNodes = useGenerationCanvasStore((state) => state.nodes)
   const allEdges = useGenerationCanvasStore((state) => state.edges)
+  const groups = useGenerationCanvasStore((state) => state.groups)
+  const pendingConnectionSourceId = useGenerationCanvasStore((state) => state.pendingConnectionSourceId)
+  const pendingConnectionSourceSide = useGenerationCanvasStore((state) => state.pendingConnectionSourceSide)
+  const connectToGroup = useGenerationCanvasStore((state) => state.connectToGroup)
   const addNode = useGenerationCanvasStore((state) => state.addNode)
   const activeCategoryId = useWorkbenchStore((state) => state.activeCategoryId)
   // S4-B5：client → canvas 坐标换算（react-flow 官方，替代老画布 getCanvasPointFromClientPoint 自研换算）。
@@ -81,6 +100,10 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
     const visibleIds = new Set(nodes.map((n) => n.id))
     return allEdges.filter((edge) => visibleIds.has(edge.source) && visibleIds.has(edge.target))
   }, [allEdges, nodes])
+
+  // S4-F9 组框：groups + 分类过滤后的 nodes → getCanvasGroupBoxes 得 flow 坐标组框（纯函数，复用老画布）。
+  // 组框层用 useViewport 同步 transform（ReactFlowGroupFrameOverlay 内），随画布缩放对齐节点。
+  const groupBoxes = React.useMemo(() => getCanvasGroupBoxes(groups, nodes), [groups, nodes])
 
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<NomiReactFlowNode>([])
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<NomiReactFlowEdge>([])
@@ -185,6 +208,20 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
       // 只允许源节点能产媒体（对齐老画布 useDragToConnect.onDropOnEmpty 判定）。
       const sourceCanCreateMedia = sourceNode.kind === 'text' || sourceNode.kind === 'image' || sourceNode.kind === 'video'
       if (!sourceCanCreateMedia) return
+      // S4-F9 连到整组：放空落在组框空白 → 组内每成员一根边。优先级对齐老画布（节点 > 组框 > 空白），
+      // 必须在「弹新建节点菜单」之前判组框（否则组内空白会被当画布空白）。用真实 client 坐标命中
+      // [data-group-id]（elementsFromPoint 需屏幕坐标，不是 connectionState.from 手柄位置）。
+      // connectToGroup 依赖 pendingConnectionSourceId（读 pending 物化），故先 startConnection 设 pending，
+      // 再 connectToGroup（同 S4-D2 handleAddConnectedNode 的 startConnection+complete 模式）。
+      const clientX = 'clientX' in event ? event.clientX : 0
+      const clientY = 'clientY' in event ? event.clientY : 0
+      const targetGroupId = findConnectionTargetGroupId(clientX, clientY)
+      if (targetGroupId) {
+        const sourceSide = connectionState.fromPosition === Position.Left ? 'left' : 'right'
+        startConnection(sourceNodeId, sourceSide)
+        connectToGroup(targetGroupId)
+        return
+      }
       const point = screenToFlowPosition({ x: connectionState.from.x, y: connectionState.from.y })
       const sourceSide = connectionState.fromPosition === Position.Left ? 'left' : 'right'
       setConnectionCreateMenu({
@@ -194,7 +231,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
         canvasY: Math.round(point.y),
       })
     },
-    [readOnly, screenToFlowPosition],
+    [readOnly, screenToFlowPosition, startConnection, connectToGroup],
   )
 
   const handleAddConnectedNode = React.useCallback(
@@ -315,6 +352,17 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           minZoom={0.2}
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
+        />
+        {/* S4-F9 组框层：useViewport 同步 transform，随画布缩放对齐节点（评审点 3：z-0 置于节点之下，不挡拖拽）。 */}
+        <ReactFlowGroupFrameOverlay
+          boxes={groupBoxes}
+          pendingConnection={!readOnly && Boolean(pendingConnectionSourceId)}
+          pendingConnectionSide={pendingConnectionSourceSide}
+          onConnectToGroup={(groupId) => {
+            // 拖线命中组框空白已由 handleConnectEnd 设了 pending（startConnection），这里补一道：
+            // 若无 pending（如非拖线触发）则安全返回，connectToGroup 内部会 clearPending。
+            connectToGroup(groupId)
+          }}
         />
         {!readOnly ? (
           <CanvasToolbar getInsertionPosition={getInsertionPosition} categoryId={activeCategoryId} />
