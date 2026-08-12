@@ -509,8 +509,12 @@
 | `7bcc71e` | S4-F8 | 连线校验（isValidConnection + canConnectNodes 粗校验，D11 方案 B） |
 | `e6427e9` | 测试 | react-flow 画布 smoke walk（S4 走查基线，10 项断言） |
 | `d071f03` | S4-A4 | 修复节点选中态失效（选区同步缺失：select change 回写 store + toReactFlowNode 投影 selected） |
+| `c165d32` | S4-样式 | 清除 react-flow 强加给自定义节点 wrapper 的白底/边框/padding（reactFlowOverrides.css） |
+| （未提交）| 机制 | 原版对齐自查 walk（canvas-react-flow-parity.walk.mjs，23 断言） |
 
 ### 进行中 / 下一步
+- **✅ 白边/错位已修（2026-08-12，commit `c165d32`）**：react-flow 给自定义节点 wrapper（`.react-flow__node-default`）强加内置 default 节点的视觉（`background:#fff / border:1px solid #1a192b / padding:10px`），使 wrapper 比内部根 div 大一圈 → 白底外露 + 内容被 padding 偏移（实测 wrapper 与 inner 错位 11px）。**修**：新建 `styles/reactFlowOverrides.css` 清掉 wrapper 默认视觉，容器紧随官方 style.css 之后 import。实测修复后 wrapper 与 inner 几何完全重合。
+- **✅ 原版对齐自查机制（2026-08-12）**：`tests/ux/canvas-react-flow-parity.walk.mjs`（23 项断言全绿），把「活不仔细/和原版差别大」变成自动化断言：wrapper 几何==inner（防白边）、wrapper 无默认白底/边框/padding、i18n key 无泄漏、pending 占位来自 i18n、工具栏≥4 按钮、渲染宽=整数。**跑法**：`VITE_RENDER_CANVAS_WITH_REACT_FLOW=true pnpm run build && node tests/ux/canvas-react-flow-parity.walk.mjs`。**教训**：基线不能拍脑袋（曾把 image 节点宽臆断为 220，实为 registry defaultSize 340），必须读老画布源码/实测。
 - **S3 已接入**、**S4 部分接入**（D1/D2/A4-A6）。剩：
   1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
   2. **video 浮条**：已通过 `NodeResultDownloadButton`→`NodeVideoFrameToolbar` 链路生效（抽帧/按镜头拆 `NodeShotCutPanel`），无需额外。
