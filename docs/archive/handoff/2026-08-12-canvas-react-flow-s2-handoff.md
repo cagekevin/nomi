@@ -21,8 +21,9 @@
 | D3 | **`ReactFlowNode` 从零按官方建，不背 `BaseGenerationNode` 952 行壳** | 避免改共享壳破坏一切 |
 | D4 | **内容层按 kind 分发，复用引擎无关 body** | code-explorer 判定：多数 body 无 `scale()`，纯 props/store 驱动可搬 |
 | D5 | **用官方 `NodeToolbar`（自动恒定屏幕尺寸）**，composer/浮条都用它 | `NodeToolbar.d.ts:4` "doesn't scale with the viewport" |
+| D6 | **PanoramaViewer / NodeMediaPreviewDialog 复查为可复用**（原标"必须重写"有误） | 两者无老画布 DOM/scale 耦合：PanoramaViewer 纯 props + `createPortal(document.body)`；preview 弹窗 portal 目标 `.workbench-generation__canvas` 在 react-flow 下仍存在 |
 
-完整决策记录在 plan §三.6（含 D1-D4）。
+完整决策记录在 plan §三.6（含 D1-D6）。
 
 ## 三、已完成进度（全部已 commit，main 分支）
 
@@ -32,19 +33,33 @@
 - `src/workbench/generationCanvas/components/ReactFlowGenerationCanvas.tsx`（react-flow 容器 + 切换）
 - `NomiStudioApp.tsx`：`VITE_RENDER_CANVAS_WITH_REACT_FLOW` 开关
 
-**S2 核心完成**：
+**S2 完成**（STEP 1-4 + 内容层 + 剩余 kind + i18n 门岗清零）：
 - `src/workbench/generationCanvas/nodes/ReactFlowNode.tsx`：**react-flow 自定义节点**（NodeResizer/Handle 骨架 + 内容层 kind 分发 + composer/浮条 NodeToolbar）
-  - 内容层：audio/text（`AudioStripNode`）、image（`DeferredNodeImage`+内联标题）、video（`NodeVideoPlaybackGuard`）
-  - 拖拽：`onNodeDragStop` → `applyDragSettledToStore` + `commitPersistedChange`（松手一次回写，中间帧不回写）
+  - 内容层（**S2 已全部接入**，kind 分发）：
+  - audio/text：`AudioStripNode`；text 也可编辑（`TextDocumentNode`）
+  - image：`DeferredNodeImage` + `ImageResultStackControls`（多图堆栈）+ `ImageCropGridOverlay`（裁剪/切图，接 `useNodeImageEditing`）+ 内联标题
+  - video：`NodeVideoPlaybackGuard`；浮条经 `NodeResultDownloadButton`→`NodeVideoFrameToolbar`（抽首/尾帧 + 按镜头拆 `NodeShotCutPanel`）
+  - panorama：`PanoramaViewer`（D6 复查可复用）+ 全屏/下载/生成记录浮条（`useNodePanoramaHandlers`）
+  - scene3d：`Scene3DEditor`（含 TrajectoryRenderer）；model3d 结果：`Model3DViewer`
+  - character/scene/audio/whiteboard（card kind）：`NodeCardBody` 按 renderKind 分发
+  - 失败态：`NodeErrorReport`（`confirmAndRunNode` 重试）
+- 拖拽：`onNodeDragStop` → `applyDragSettledToStore` + `commitPersistedChange`（松手一次回写，中间帧不回写）
   - 缩放：`NodeResizer onResizeEnd` → `updateNode` store.size + 媒体 `keepAspectRatio`
   - composer：`NodeToolbar Bottom` + `positionMode="inline"`
-  - 浮条：`NodeToolbar Top` + 重新生成按钮（`regenerateNodeInPlace`）
+  - 浮条：`NodeToolbar Top` + `positionMode="inline"`（`FloatingToolbarShell` 加 `positionMode` prop 解耦定位，只复用纯按钮）
 - `NodeGenerationComposer.tsx`：**定位引擎无关化**——删 `useComposerViewportPlacement`（反缩放/翻转/避让/夹取），加 `positionMode` prop（老画布 `absolute-below` / react-flow `inline`）。**注意：删翻转后参数条固定贴下**（`composerAttachmentSide="bottom"`，修复了残留 flipUp）
 - 删孤儿：`useComposerViewportPlacement.ts` + 测试（无生产引用）
 - `canvasControlsStructure.test.ts`：更新（composer 不再断言 `group-data-[dragging]`）
+- **i18n 门岗清零**：ReactFlowNode 占位文案全改 i18n（13 literal → 0）
 
 **最近 commit（HEAD 往前）**：
 ```
+dba8d2e docs S2 进度日志更新（D6 全景与 preview 复查为可复用）
+803e7d6 chore S2 i18n 门岗清零（13 literal → 0）
+57b1ac8 S2-STEP2 剩余 kind 接入（text/scene3d/model3d/card/错误态）
+074f959 S2-STEP2 image 内容层补全（堆栈 + 裁剪）
+a8bd00c S2-STEP4 全景内容层 + 全景浮条
+c9d00cc S2-STEP4 浮条补全（FloatingToolbarShell positionMode=inline + NodeToolbar Top 3 处）
 cab450b S2 STEP4 浮动工具条精简版（NodeToolbar Top 重新生成）
 8fb0a08 fix composer flipUp 残留（参数条固定贴下）
 a5d0a65 docs 进度日志 - composer 接入
@@ -67,26 +82,27 @@ ca7a651 S2 STEP2 拖拽副作用迁移
 - **可靠验证方式**：`pnpm run typecheck 1> out.txt 2>&1; echo "EXIT=$LASTEXITCODE"`，然后 `Get-Content out.txt | Select-String "error TS"`（但 `Get-Content` 可能被安全规则拦，改读文件）。
 - 改完代码**务必**确认 `EXIT=0` 再提交。
 
-## 五、下一步（S2 未完成项）
+## 五、下一步（S2 已完成 → S3 边渲染）
 
-1. **S2 STEP 4 浮条补全**：当前浮条只有"重新生成"精简版，需补全老画布 `NodeFloatingToolbar` 的 4 处复用（图片/视频/全景/结果下载）。**关键**：老画布 `FloatingToolbarShell` 含 `group-data-[dragging]` + `scale(1/canvasZoom)`（D1 已定案废弃），react-flow 用 `NodeToolbar Top` 放**裸按钮**（复用 `ToolbarButton` 等纯 UI，不走 FloatingToolbarShell 定位）。
-2. **S2 STEP 2 剩余 content**：
-   - image 裁剪 `ImageCropGridOverlay`（可复用，需接编辑状态机 `useNodeImageEditing`）
-   - 需小改 `ImageResultStackControls`（删 dragging 类 + 喂节点尺寸）
-   - 必须重写：`PanoramaViewer`（全景）、`WhiteboardLeaferCanvas`（白板）、`NodeMediaPreviewDialog`（预览弹窗）
-3. **S2 剩余 kind**：text 用 `AudioStripNode` 已接；`ImageResultStack`、`TrajectoryRenderer`（scene3d）、`NodeShotCutPanel`、`NodeErrorReport`、`InlineParameterBar` 按 code-explorer 判定表接入。
-4. **S4 连线**：`Handle` 骨架已有，需接完整连接语义（老画布 `MagneticConnectionHandle`/`useDragToConnect` → react-flow `onConnect` + `applyConnectionToStore`，已在桥实现）。
-5. **S3 后续**：pan/zoom 内建已有（S1 A3），S3 主要是过渡性收尾。
+**S2 已全部完成**（内容层 + 浮条 4 处 + 剩余 kind + 裁剪/堆栈 + 失败态 + i18n 门岗清零）。剩 S2 尾：
+1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
+2. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer` 一起复用，不单独接。
 
-**门岗**（每 commit 前）：typecheck（用文件重定向确认 EXIT=0）→ build → lint → `pnpm run test -- --run`（当前 469 files / 4108 tests 全绿）。老画布 walk `canvas-drag-pan-gestures` 迁移期可能红（D2 接受，S7 删老画布后一致）。
+**下一步 = S3 边渲染**（在 plan §三.3 触发后）：
+- 自定义 Edge：`BaseEdge` + `getBezierPath`（react-flow 官方）
+- 边模式/断开/选中（E3/E4）：老画布 `Edge` 组件 → react-flow `Edge` 机制
+- **S4 连线**：`Handle` 骨架已有，需接完整连接语义（老画布 `MagneticConnectionHandle`/`useDragToConnect` → react-flow `onConnect` + `applyConnectionToStore`，已在桥实现）。
+
+**门岗**（每 commit 前）：typecheck（用文件重定向确认 EXIT=0）→ build → lint → `pnpm run test -- --run`（当前 469 files / 4108 tests 全绿）。老画布 walk `canvas-drag-pan-gestures` 迁移期可能红（D2 接受，S7 删老画布后一致）。i18n 已清零；filesize 白名单 3 个（BaseGenerationNode 超限在白名单，迁移期不处理）。
 
 ## 六、关键源码位置速查
 
 | 文件 | 角色 |
 |---|---|
 | `ReactFlowGenerationCanvas.tsx` | react-flow 容器（桥订阅驱动 + 事件回写 + 空态 + 拖拽导入）|
-| `ReactFlowNode.tsx` | react-flow 自定义节点（NodeResizer/Handle/内容层/composer/浮条）|
+| `ReactFlowNode.tsx` | react-flow 自定义节点（NodeResizer/Handle/内容层 kind 分发/composer/浮条 4 处/裁剪/堆栈/错误态）|
 | `renderFlowBridge.ts` | store ↔ react-flow 单向桥（纯函数 + 9 测试）|
+| `NodeFloatingToolbar.tsx` | `FloatingToolbarShell` 加 `positionMode="inline"`（去定位外壳，只复用纯按钮）|
 | `NodeGenerationComposer.tsx` | composer（定位引擎无关，positionMode 双轨）|
 | `nodeSizing.ts` | `resolveNodeVisualSize`（宽固定/高内容驱动，桥只塞 width）|
 | `BaseGenerationNode.tsx` | 老画布节点（**S7 删**，迁移期不动）|
