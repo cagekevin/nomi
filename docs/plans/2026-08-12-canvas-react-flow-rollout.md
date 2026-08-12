@@ -406,6 +406,65 @@
 
 ---
 
+## 三.6 执行进度日志（连续记录，验收辅助；每阶段更新，勿删）
+
+> 目的：给用户/后续 AI 一份**连续可读**的执行进度，尤其记录**关键抉择 + 理由**，便于验收时对照判断。每完成一个 commit/决策，更新本节。
+
+### 当前状态（截至 2026-08-12）
+- **S1 完成**（容器骨架 + 数据流桥 + 切换开关），commit `782433a` + `abd113a` + `82bca4f`。
+- **S2 进行中**：STEP 1-2 已落地（`673617a`、`2a64ab7`、`43cc7ee`），内容层按 kind 分发，audio/text + image 已接真实 body。
+- 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 保持 false（默认老画布）；迁移期开发态，不中途真机。
+
+### 关键抉择记录（验收时判断"为什么这么做"的依据）
+
+**D1｜不保留"固定尺寸"（CSS 反缩放）体验（2026-08-12 用户拍板）**
+- 旧画布浮动工具条/composer 用 `scale(1/canvasZoom)` 保持恒定屏幕尺寸（`NodeGenerationComposer.tsx:483,491` / `NodeFloatingToolbar.tsx:28,31`）。
+- 决策：放弃该 hack，按 **react-flow 官方 `NodeToolbar`** 做（官方实现也"不随 viewport 缩放"，`NodeToolbar.d.ts:4`，但非 hack）。→ 见补强 7。
+
+**D2｜接受老画布兼容性下降（2026-08-12 用户拍板）**
+- 老画布是**过渡产品**，最终删（S7）。因此**不做**"引擎无关定位层"抽象，内容层直接按 react-flow 方向重写，直接用 `NodeToolbar` 等官方组件。
+- 补强 6 原主张"不能直接改 BaseGenerationNode、须拆壳"被推翻（补强 7 覆盖）。
+
+**D3｜react-flow 节点从零建，不背老画布壳（执行定，2026-08-12）**
+- `BaseGenerationNode`（952 行，60+ 依赖，transform/拖拽/resize/手柄/内容硬耦合）**不动**（老画布用，S7 删）。
+- 新建 `ReactFlowNode.tsx` **从零按 react-flow 官方方式建**（消费 `NodeProps`，NodeResizer/Handle 骨架），避免"改共享壳破坏一切"的高风险。
+- 这是"安全过渡"的核心姿势：新节点不背负自研壳包袱，内容层逐个按官方机制扩展。
+
+**D4｜内容层按 kind 分发，复用引擎无关 body（执行定，2026-08-12）**
+- code-explorer 判定表：多数 body **无 `scale(1/canvasZoom)`**（反缩放封装在更外层 composer/toolbar），是纯 props/store 驱动 → **可直接搬进 react-flow**。
+- 判定分级：可直接复用（`AudioStripNode`/`ImageCropGridOverlay`/`TrajectoryRenderer`）/ 需小改（`ImageResultStack`/`InlineParameterBar`/`NodeErrorReport`/`NodeShotCutPanel`，删 DOM 契约）/ 必须重写（`PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`/`NodeConnectionHandles`）。
+
+### 已完成 commit 清单
+| commit | 阶段 | 内容 |
+|---|---|---|
+| `782433a` | S1 | 容器骨架 + 数据流桥 + 切换开关 |
+| `abd113a` | S1 | typecheck 修复（import.meta.env 类型） |
+| `82bca4f` | S2前置 | 桥只塞 width 不塞 height（补强 5） |
+| `911b37a` | 计划 | S2 审计补强 5 项 |
+| `b7f3596` | 计划 | S2 定案（D1/D2） |
+| `b6769ac` | 计划 | S2 功能迁移映射表 |
+| `673617a` | S2-STEP1 | ReactFlowNode 节点 + 容器 nodeTypes |
+| `2a64ab7` | S2-STEP2 | 内容层 kind 分发 + AudioStripNode |
+| `43cc7ee` | S2-STEP2 | image 内容层（DeferredNodeImage + NodeInlineImageTitle） |
+
+### 进行中 / 下一步
+- S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用）；需小改 `ImageResultStackControls`/`NodeVideoPlaybackGuard`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`。
+- S2 STEP 3：composer 用 `NodeToolbar`。
+- S2 STEP 4：浮动工具条用 `NodeToolbar`。
+- S2 STEP 2 拖拽/缩放副作用迁移（`onNodeDrag`/`onResize`）。
+- **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
+
+### 验收对照（S2 目标 vs 现状）
+- ✅ 容器渲染真实节点（ReactFlowNode）
+- ✅ audio/text/image 内容层
+- ⏳ image 裁剪、video、panorama、whiteboard、preview 弹窗
+- ⏳ composer（NodeToolbar）
+- ⏳ 浮动工具条（NodeToolbar）
+- ⏳ 拖拽/缩放副作用迁移
+- ⏳ 连线 Handle（S4）
+
+---
+
 ## 四.5 Agent 操作画布兼容性（用户提出 + 源码核验，必须保留）
 
 **结论：Agent 操作画布 = 100% 走 store，与渲染层解耦，迁移基本安全，但坐标语义是铁律。**
