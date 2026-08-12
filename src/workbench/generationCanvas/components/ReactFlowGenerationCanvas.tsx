@@ -8,14 +8,17 @@
 // S2 才接真实内容层节点（BaseGenerationNode nodeTypes）；本阶段用最简卡片渲染，验证桥闭环。
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Connection, type NodeTypes, type EdgeTypes } from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useReactFlow, Position, ConnectionLineType, ConnectionMode, type Connection, type NodeTypes, type EdgeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { cn } from '../../../utils/cn'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'
 import { ReactFlowNode } from '../nodes/ReactFlowNode'
 import ReactFlowEdge from './ReactFlowEdge'
+import { NodeAddMenu } from './CanvasToolbar'
 import { CanvasEmptyState } from './CanvasEmptyState'
+import { completeNodeConnection } from '../nodes/completeNodeConnection'
+import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME } from '../../assets/assetLibraryDrag'
 import {
@@ -51,6 +54,9 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const allEdges = useGenerationCanvasStore((state) => state.edges)
   const addNode = useGenerationCanvasStore((state) => state.addNode)
   const activeCategoryId = useWorkbenchStore((state) => state.activeCategoryId)
+  // S4-B5：client → canvas 坐标换算（react-flow 官方，替代老画布 getCanvasPointFromClientPoint 自研换算）。
+  // canvas → screen 用于菜单 DOM 定位（NodeAddMenu 是 absolute 屏幕定位，需相对容器的 screen 坐标）。
+  const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
 
   // 分类过滤：节点无 categoryId 时回退到 project default（shots），与老画布一致（GenerationCanvas.tsx:90-96）。
   const nodes = React.useMemo(() => {
@@ -70,6 +76,132 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   React.useEffect(() => {
     markReady()
   }, [markReady])
+
+  // S4-D1 右键菜单（替代老画布 useCanvasContextNodeMenu 自研 pointer 仲裁，用官方 onNodeContextMenu/onPaneContextMenu）。
+  // 老画布担心「macOS ctrl+click / 右键平移冲突」→ react-flow 官方事件已处理，不用自研排队仲裁。
+  const [contextMenu, setContextMenu] = React.useState<{ canvasX: number; canvasY: number } | null>(null)
+
+  // 右键菜单 window 级关闭监听（D4：pointerdown/Escape/blur 关闭，对齐老画布 GenerationCanvas.tsx:284-297）。
+  React.useEffect(() => {
+    if (!contextMenu) return undefined
+    const close = () => setContextMenu(null)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('blur', close)
+    }
+  }, [contextMenu])
+
+  const handlePaneContextMenu = React.useCallback(
+    (event: React.MouseEvent | MouseEvent) => {
+      if (readOnly) return
+      event.preventDefault()
+      const point = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      setContextMenu({ canvasX: Math.round(point.x), canvasY: Math.round(point.y) })
+    },
+    [readOnly, screenToFlowPosition],
+  )
+
+  const handleNodeContextMenu = React.useCallback(
+    (event: React.MouseEvent, node: NomiReactFlowNode) => {
+      if (readOnly) return
+      event.preventDefault()
+      // 节点上右键 → 在节点旁建新节点（落点 = 右键处 canvas 坐标，供 NodeAddMenu 建节点）。
+      void node
+      const point = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+      setContextMenu({ canvasX: Math.round(point.x), canvasY: Math.round(point.y) })
+    },
+    [readOnly, screenToFlowPosition],
+  )
+
+  const handleAddContextNode = React.useCallback(
+    (kind: GenerationNodeKind) => {
+      if (!contextMenu) return
+      addNode({
+        kind,
+        position: { x: contextMenu.canvasX, y: contextMenu.canvasY },
+        categoryId: activeCategoryId,
+      })
+      setContextMenu(null)
+    },
+    [activeCategoryId, addNode, contextMenu],
+  )
+
+  // —— S4-D2 放空菜单：拖线到空白处松手 → 弹「建什么节点」菜单，选后建新节点 + 自动连上源节点 ——
+  const startConnection = useGenerationCanvasStore((state) => state.startConnection)
+  const [connectionCreateMenu, setConnectionCreateMenu] = React.useState<{
+    sourceNodeId: string
+    sourceSide: 'left' | 'right'
+    canvasX: number
+    canvasY: number
+  } | null>(null)
+
+  // 放空菜单 window 级关闭监听（D4，对齐老画布 GenerationCanvas.tsx:299-316）。
+  React.useEffect(() => {
+    if (!connectionCreateMenu) return undefined
+    const close = () => setConnectionCreateMenu(null)
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close()
+    }
+    window.addEventListener('pointerdown', close)
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('blur', close)
+    return () => {
+      window.removeEventListener('pointerdown', close)
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('blur', close)
+    }
+  }, [connectionCreateMenu])
+
+  // onConnectEnd：拖线松手时触发。放空（toNode == null）且源节点可产媒体 → 弹建节点菜单。
+  const handleConnectEnd = React.useCallback(
+    (event: MouseEvent | TouchEvent, connectionState: import('@xyflow/react').FinalConnectionState) => {
+      if (readOnly) return
+      const fromNode = connectionState.fromNode
+      const toNode = connectionState.toNode
+      if (!fromNode || toNode) return // 非放空（有目标节点）→ 正常 onConnect 已建边
+      const sourceNodeId = fromNode.id
+      const sourceNode = useGenerationCanvasStore.getState().nodes.find((n) => n.id === sourceNodeId)
+      if (!sourceNode) return
+      // 只允许源节点能产媒体（对齐老画布 useDragToConnect.onDropOnEmpty 判定）。
+      const sourceCanCreateMedia = sourceNode.kind === 'text' || sourceNode.kind === 'image' || sourceNode.kind === 'video'
+      if (!sourceCanCreateMedia) return
+      const point = screenToFlowPosition({ x: connectionState.from.x, y: connectionState.from.y })
+      const sourceSide = connectionState.fromPosition === Position.Left ? 'left' : 'right'
+      setConnectionCreateMenu({
+        sourceNodeId,
+        sourceSide,
+        canvasX: Math.round(point.x),
+        canvasY: Math.round(point.y),
+      })
+    },
+    [readOnly, screenToFlowPosition],
+  )
+
+  const handleAddConnectedNode = React.useCallback(
+    (kind: GenerationNodeKind) => {
+      if (!connectionCreateMenu) return
+      const { sourceNodeId, sourceSide, canvasX, canvasY } = connectionCreateMenu
+      const created = addNode({
+        kind,
+        position: { x: canvasX, y: canvasY },
+        categoryId: activeCategoryId,
+        exactPosition: true,
+        select: true,
+      })
+      // 复刻老画布 handleAddConnectedNode（GenerationCanvas.tsx:519-533）：startConnection + completeNodeConnection。
+      startConnection(sourceNodeId, sourceSide)
+      completeNodeConnection(created.id)
+      setConnectionCreateMenu(null)
+    },
+    [activeCategoryId, addNode, connectionCreateMenu, startConnection],
+  )
 
   // 渲染半程：订阅 store nodes/edges（分类过滤后）→ react-flow 数据（单向桥闭环核心）。
   React.useEffect(() => {
@@ -151,9 +283,17 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           onNodesChange={handleNodesChange}
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
+          onConnectEnd={handleConnectEnd}
           onNodeDragStop={handleNodeDragStop}
           onDrop={handleStageDrop}
           onDragOver={handleStageDragOver}
+          onNodeContextMenu={handleNodeContextMenu}
+          onPaneContextMenu={handlePaneContextMenu}
+          // S4-A4/A5/A6：react-flow 内建交互，显式配置对齐老画布行为——
+          // 框选键 Shift（追加）、连线预览线贝塞尔（自研 rAF 预览线由 react-flow connection line 接管）。
+          selectionKeyCode="Shift"
+          connectionLineType={ConnectionLineType.Bezier}
+          connectionMode={ConnectionMode.Loose}
           // S1 空容器不 fitView（初始 viewport {0,0,1}，保证 stage 坐标 == canvas 坐标）；
           // 自动 fit 是 S5（B3/G4）。
           fitView={false}
@@ -167,6 +307,31 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
             onCreate={() =>
               addNode({ kind: 'image', position: { x: 240, y: 240 }, categoryId: activeCategoryId, select: true })
             }
+          />
+        ) : null}
+        {contextMenu ? (
+          <NodeAddMenu
+            className="generation-canvas-v2__context-node-menu z-[20] left-auto top-auto"
+            style={(() => {
+              const p = flowToScreenPosition({ x: contextMenu.canvasX, y: contextMenu.canvasY })
+              return { left: p.x, top: p.y }
+            })()}
+            onPointerDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+            onAddNode={handleAddContextNode}
+          />
+        ) : null}
+        {connectionCreateMenu ? (
+          <NodeAddMenu
+            className="generation-canvas-v2__connection-create-menu z-[20] left-auto top-auto w-[132px]"
+            style={(() => {
+              const p = flowToScreenPosition({ x: connectionCreateMenu.canvasX, y: connectionCreateMenu.canvasY })
+              return { left: p.x, top: p.y }
+            })()}
+            kinds={['image', 'video']}
+            onPointerDown={(event) => event.stopPropagation()}
+            onContextMenu={(event) => event.preventDefault()}
+            onAddNode={handleAddConnectedNode}
           />
         ) : null}
       </div>
