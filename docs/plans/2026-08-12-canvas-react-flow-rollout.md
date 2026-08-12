@@ -414,8 +414,9 @@
 - **S1 完成**（容器骨架 + 数据流桥 + 切换开关）。
 - **S2 完成**：STEP 1-4 + 内容层全部接入。ReactFlowNode 已接全 kind 分发（audio/text/image/video/panorama/scene3d/model3d/card）+ 浮条 4 处（图片/视频/结果下载/全景）+ 裁剪框/结果堆栈 + 失败态。剩 readOnly 透传（当前硬编码 false，S6 分享预览时处理）。
 - **S3 完成**（边渲染 A2 + E3/E4）：自定义 `ReactFlowEdge`（`getBezierPath` + `BaseEdge` + `EdgeLabelRenderer`）+ 边 mode 标签门（选中节点才浮出）+ 模式菜单/断开回写 store + 边删除回写 `disconnectEdge`。桥 `toReactFlowEdge` 改为把 `nomiEdge` 整包进 `data.nomiEdge`（对齐节点 `data.nomiNode`）。决策 D6/D7。
-- **S4 部分完成**（交互菜单 + 内建交互）：D1 右键菜单（官方事件替代自研仲裁，D8）+ D2 放空菜单（D9）+ A4-A6 内建框选/连线预览/放空（显式配置）。**剩 S4**：F8 完整（isValidConnection 校验）、F9 组框连整组、F10 出端口选择层。B2 归 S5（D10：与 B1 变换同步强耦合）。
-- 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 保持 false（默认老画布）；迁移期开发态，不中途真机。
+- **S4 大部分完成**：D1 右键菜单（官方事件替代自研仲裁，D8）+ D2 放空菜单（D9）+ A4-A6 内建框选/连线预览/放空（显式配置）+ **A4 选区同步修复**（选中态失效，commit `d071f03`）+ **F8 连线校验**（isValidConnection + canConnectNodes，D11 方案 B）。**剩 S4**：F9 组框连整组、F10 出端口选择层。B2 归 S5（D10：与 B1 变换同步强耦合）。
+- **react-flow 画布真机基线**：`tests/ux/canvas-react-flow-smoke.walk.mjs`（S4 走查基线，**11/11 断言全绿**）：进入画布 / 空态 CTA / 建节点 / 右键菜单 D1 / 菜单建节点+关闭 / 选中态 / 零页面错误。
+- 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 默认 false（老画布）；迁移期开发态，真机走查用 `VITE_RENDER_CANVAS_WITH_REACT_FLOW=true pnpm run build` + walk。
 
 ### 关键抉择记录（验收时判断"为什么这么做"的依据）
 
