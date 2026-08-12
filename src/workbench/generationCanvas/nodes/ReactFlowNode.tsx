@@ -31,6 +31,8 @@ import { applyFixationMakeup } from '../fixation/buildFixationNode'
 import NodeMediaPreviewDialog from './NodeMediaPreviewDialog'
 import ProvenancePanel from './ProvenancePanel'
 import PanoramaUploadFallback from './PanoramaUploadFallback'
+import ImageCropGridOverlay, { type CropGridResult, type CropGridSize } from './render/ImageCropGridOverlay'
+import { ImageResultStackControls } from './ImageResultStack'
 import { useNodePanoramaHandlers } from './useNodePanoramaHandlers'
 import { useResultDownload } from './useResultDownload'
 import {
@@ -66,6 +68,18 @@ type NodeBodyDeps = {
   handlePanoramaFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void
   /** 全景：视口截图建节点。 */
   handlePanoramaScreenshot: (screenshot: import('./PanoramaViewer').PanoramaScreenshot) => void
+  /** 图片：裁剪/切图框当前档位（null=关闭）。 */
+  cropGrid: CropGridSize | null
+  /** 图片：裁剪框确认（复用 useNodeImageEditing.handleEditConfirm，纯 canvas 像素操作）。 */
+  onCropConfirm: (result: CropGridResult) => void
+  /** 图片：取消裁剪框。 */
+  onCropCancel: () => void
+  /** 图片：结果堆栈打开态（互斥浮条/内联标题）。 */
+  imageStackOpen: boolean
+  /** 图片：结果堆栈开合回调。 */
+  onImageStackOpenChange: (open: boolean) => void
+  /** 只读（分享预览等）：隐藏可交互浮条/编辑入口。 */
+  readOnly: boolean
 }
 
 /**
@@ -131,15 +145,40 @@ function renderNodeBody(
         </div>
       )
     }
+    // 图片容器高度用 resolveNodeVisualSize().height（内容驱动，随图片比例），object-contain 铺满
+    // （补强 5：高度动态、由 react-flow 自测 DOM）。裁剪框 absolute inset-0 与图片显示区对齐。
     return (
-      <div className="relative h-[140px] w-full overflow-hidden bg-workbench-bg/40">
+      <div
+        className="relative w-full overflow-hidden bg-workbench-bg/40"
+        style={{ height: visualSize.height }}
+      >
         <DeferredNodeImage
           src={imageUrl}
           alt={node.title || node.id}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
           placeholderClassName="bg-workbench-bg/40"
         />
-        <NodeInlineImageTitle nodeId={node.id} value={node.title || node.id} selected={selected} />
+        {/* 裁剪/切图框：editGrid 打开时 absolute inset-0 覆盖图片区（与显示图像素对齐）。 */}
+        {deps.cropGrid !== null ? (
+          <ImageCropGridOverlay
+            imageUrl={imageUrl}
+            gridSize={deps.cropGrid}
+            onConfirm={(result) => deps.onCropConfirm(result)}
+            onCancel={deps.onCropCancel}
+          />
+        ) : null}
+        {/* 结果堆栈（多图切换）：计数/展开按钮 + 打开态网格面板。 */}
+        <ImageResultStackControls
+          node={node}
+          readOnly={deps.readOnly}
+          selected={selected}
+          visualWidth={visualSize.width}
+          visualHeight={visualSize.height}
+          onOpenChange={deps.onImageStackOpenChange}
+        />
+        {!deps.imageStackOpen ? (
+          <NodeInlineImageTitle nodeId={node.id} value={node.title || node.id} selected={selected} />
+        ) : null}
       </div>
     )
   }
@@ -169,6 +208,13 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
   const openMediaPreview = React.useCallback(() => setMediaPreviewOpen(true), [])
   const closeMediaPreview = React.useCallback(() => setMediaPreviewOpen(false), [])
 
+  // —— 图片结果堆栈打开态（本地 UI 互斥开关，不进 store；打开时隐藏浮条/内联标题/composer）——
+  const [imageStackOpen, setImageStackOpen] = React.useState(false)
+  // 当节点取消选中或结果不足时自动收起（ImageResultStackControls 内也有自动关逻辑，这里兜底）。
+  React.useEffect(() => {
+    if (!selected) setImageStackOpen(false)
+  }, [selected])
+
   // —— 全景：全屏 trigger 回填 + 上传换图/截图建节点 + 下载 ——
   const panoramaFullscreenRef = React.useRef<(() => void) | null>(null)
   const panorama = useNodePanoramaHandlers(node, visualSize)
@@ -184,7 +230,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       {/* composer（react-flow 官方 NodeToolbar Bottom，S2 STEP 3）：
           NodeToolbar 不随 viewport 缩放（官方实现），默认节点选中显示、多选隐藏（自动处理）。
           composer 用 positionMode="inline"（NodeToolbar 提供恒定尺寸定位，官方建议）。 */}
-      <NodeToolbar position={Position.Bottom} offset={12} isVisible={selected}>
+      <NodeToolbar position={Position.Bottom} offset={12} isVisible={selected && !imageStackOpen}>
         <React.Suspense fallback={null}>
           <NodeGenerationComposer node={node} visualSize={visualSize} positionMode="inline" />
         </React.Suspense>
@@ -194,7 +240,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           NodeToolbar 提供恒定屏幕尺寸定位；浮条组件 positionMode="inline" 只复用纯按钮（ToolbarButton 等），
           不走老画布 FloatingToolbarShell 的反缩放定位（D1 定案废弃）。 */}
       {node.prompt || isImageResult || isPanorama || node.result?.url ? (
-        <NodeToolbar position={Position.Top} offset={12} isVisible={selected}>
+        <NodeToolbar position={Position.Top} offset={12} isVisible={selected && !imageStackOpen}>
           <React.Suspense fallback={null}>
             {/* 全景浮条：全屏 / 下载 / 生成记录 + 重传入口。 */}
             {isPanorama ? (
@@ -332,6 +378,12 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           },
           handlePanoramaFileChange: panorama.handlePanoramaFileChange,
           handlePanoramaScreenshot: panorama.handlePanoramaScreenshot,
+          cropGrid: imageEditing.editGrid,
+          onCropConfirm: (result) => void imageEditing.handleEditConfirm(result),
+          onCropCancel: () => imageEditing.cancelEdit(),
+          imageStackOpen,
+          onImageStackOpenChange: setImageStackOpen,
+          readOnly: false,
         }, visualSize)}
       </div>
 
