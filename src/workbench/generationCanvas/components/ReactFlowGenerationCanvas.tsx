@@ -24,6 +24,7 @@ import {
 } from './canvasStageDrop'
 import {
   applyConnectionToStore,
+  applyDragSettledToStore,
   applyNodeChangesToStore,
   toReactFlowEdges,
   toReactFlowNodes,
@@ -74,10 +75,16 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const handleNodesChange = React.useCallback(
     (changes: Parameters<typeof onNodesChange>[0]) => {
       onNodesChange(changes) // 先本地响应（拖拽流畅）
-      applyNodeChangesToStore(changes) // 回写 store（真相源）→ 订阅投影回来
+      applyNodeChangesToStore(changes) // 回写 store（真相源）；position 拖拽中不回写（见桥注释）
     },
     [onNodesChange],
   )
+
+  // 拖拽结束：一次回写最终 position + undo 入栈（moveNode 内部已 emit canvas.node.moved）。
+  const handleNodeDragStop = React.useCallback((_event: unknown, node: NomiReactFlowNode) => {
+    applyDragSettledToStore(node.id, node.position)
+    useGenerationCanvasStore.getState().commitPersistedChange()
+  }, [])
 
   const handleConnect = React.useCallback((connection: Connection) => {
     applyConnectionToStore(connection)
@@ -128,6 +135,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           onNodesChange={handleNodesChange}
           onEdgesChange={onEdgesChange}
           onConnect={handleConnect}
+          onNodeDragStop={handleNodeDragStop}
           onDrop={handleStageDrop}
           onDragOver={handleStageDragOver}
           // S1 空容器不 fitView（初始 viewport {0,0,1}，保证 stage 坐标 == canvas 坐标）；

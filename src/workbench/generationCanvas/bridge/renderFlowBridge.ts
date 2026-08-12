@@ -61,24 +61,30 @@ export function snapshotToReactFlow(): { nodes: NomiReactFlowNode[]; edges: Nomi
 }
 
 /**
- * 桥的唯一入口：react-flow 的 onNodesChange → 回写 store。
+ * 桥入口：react-flow 的 onNodesChange → 回写 store。
  *
- * POC 只处理两件事（最小闭环）：position 变更（拖拽）与删除。
- * - position change：react-flow 给绝对 position → store.moveNode 绝对位置。
- * - remove change：store.deleteNode。
- * 其余变更（selection 等）不在此处理，选区由 store.selectedNodeIds 主导（react-flow 侧不持有真相）。
+ * **拖拽性能策略（S2 STEP 2 修正）**：拖拽期间 react-flow 本地先动（onNodesChange 更新 rfNodes），
+ * **不每帧写 store**（避免 store 更新风暴）；松手时 onNodeDragStop 经 applyDragSettledToStore 一次回写。
+ * 故本函数**忽略 position change**（由 applyDragSettledToStore 处理），只处理 remove 等非拖拽变化。
  *
- * 注意：拖拽期间的中间帧（dragging=true）也应回写，保证 store 是实时真相；
- * 但高频 move 的 rAF 批处理在容器 onNodeDrag 层做（见 ReactFlowGenerationCanvas），本桥只做单次语义。
+ * - remove change：store.deleteNode（删除应立即同步）。
+ * - 其余变更（selection 等）不在此处理，选区由 store.selectedNodeIds 主导（react-flow 侧不持有真相）。
  */
 export function applyNodeChangesToStore(changes: NodeChange<NomiReactFlowNode>[]): void {
   for (const change of changes) {
-    if (change.type === 'position' && change.position) {
-      useGenerationCanvasStore.getState().moveNode(change.id, change.position)
-    } else if (change.type === 'remove') {
+    if (change.type === 'remove') {
       useGenerationCanvasStore.getState().deleteNode(change.id)
     }
+    // position change 在拖拽结束经 applyDragSettledToStore 一次回写（见容器 onNodeDragStop）。
   }
+}
+
+/**
+ * 拖拽结束回写：react-flow onNodeDragStop → store.moveNode 最终绝对 position。
+ * 在容器 onNodeDragStop 调用（松手一次）。moveNode 内部已 emit canvas.node.moved（canvasNodeActions.ts:158）。
+ */
+export function applyDragSettledToStore(nodeId: string, position: { x: number; y: number }): void {
+  useGenerationCanvasStore.getState().moveNode(nodeId, position)
 }
 
 /** react-flow 的 onConnect（拖线放上目标）→ store.connectNodes。 */

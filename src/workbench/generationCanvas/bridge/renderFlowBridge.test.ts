@@ -5,6 +5,7 @@ import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import type { GenerationCanvasNode } from '../model/generationCanvasTypes'
 import {
   applyConnectionToStore,
+  applyDragSettledToStore,
   applyNodeChangesToStore,
   snapshotToReactFlow,
   toReactFlowEdge,
@@ -63,9 +64,14 @@ describe('store → react-flow 转换', () => {
 })
 
 describe('react-flow 事件 → store 回写', () => {
-  it('position change → store.moveNode（拖拽回写绝对位置）', () => {
-    applyNodeChangesToStore([{ id: 'a', type: 'position', position: { x: 999, y: 888 }, dragging: false }])
+  it('拖拽结束 applyDragSettledToStore → store.moveNode（松手一次回写绝对位置）', () => {
+    applyDragSettledToStore('a', { x: 999, y: 888 })
     expect(useGenerationCanvasStore.getState().nodes.find((n) => n.id === 'a')?.position).toEqual({ x: 999, y: 888 })
+  })
+
+  it('拖拽中间帧 position change 不回写 store（避免更新风暴，松手才 commit）', () => {
+    applyNodeChangesToStore([{ id: 'a', type: 'position', position: { x: 999, y: 888 }, dragging: true }])
+    expect(useGenerationCanvasStore.getState().nodes.find((n) => n.id === 'a')?.position).toEqual({ x: 10, y: 20 })
   })
 
   it('remove change → store.deleteNode', () => {
@@ -82,8 +88,8 @@ describe('react-flow 事件 → store 回写', () => {
   })
 
   it('回写后 store 变更能再次经 snapshotToReactFlow 反映（双向闭环成立）', () => {
-    // 拖拽回写
-    applyNodeChangesToStore([{ id: 'a', type: 'position', position: { x: 50, y: 60 }, dragging: false }])
+    // 拖拽结束回写
+    applyDragSettledToStore('a', { x: 50, y: 60 })
     // 连线回写
     applyConnectionToStore({ source: 'a', target: 'b' })
     // 再快照 → react-flow 数据反映最新 store
