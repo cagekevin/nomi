@@ -413,7 +413,8 @@
 ### 当前状态（截至 2026-08-12）
 - **S1 完成**（容器骨架 + 数据流桥 + 切换开关）。
 - **S2 完成**：STEP 1-4 + 内容层全部接入。ReactFlowNode 已接全 kind 分发（audio/text/image/video/panorama/scene3d/model3d/card）+ 浮条 4 处（图片/视频/结果下载/全景）+ 裁剪框/结果堆栈 + 失败态。剩 readOnly 透传（当前硬编码 false，S6 分享预览时处理）。
-- **S3 完成**（边渲染 A2 + E3/E4）：自定义 `ReactFlowEdge`（`getBezierPath` + `BaseEdge` + `EdgeLabelRenderer`）+ 边 mode 标签门（选中节点才浮出）+ 模式菜单/断开回写 store + 边删除回写 `disconnectEdge`。桥 `toReactFlowEdge` 改为把 `nomiEdge` 整包进 `data.nomiEdge`（对齐节点 `data.nomiNode`）。
+- **S3 完成**（边渲染 A2 + E3/E4）：自定义 `ReactFlowEdge`（`getBezierPath` + `BaseEdge` + `EdgeLabelRenderer`）+ 边 mode 标签门（选中节点才浮出）+ 模式菜单/断开回写 store + 边删除回写 `disconnectEdge`。桥 `toReactFlowEdge` 改为把 `nomiEdge` 整包进 `data.nomiEdge`（对齐节点 `data.nomiNode`）。决策 D6/D7。
+- **S4 部分完成**（交互菜单 + 内建交互）：D1 右键菜单（官方事件替代自研仲裁，D8）+ D2 放空菜单（D9）+ A4-A6 内建框选/连线预览/放空（显式配置）。**剩 S4**：F8 完整（isValidConnection 校验）、F9 组框连整组、F10 出端口选择层。B2 归 S5（D10：与 B1 变换同步强耦合）。
 - 渲染开关 `VITE_RENDER_CANVAS_WITH_REACT_FLOW` 保持 false（默认老画布）；迁移期开发态，不中途真机。
 
 ### 关键抉择记录（验收时判断"为什么这么做"的依据）
@@ -441,6 +442,34 @@
   - `NodeMediaPreviewDialog`：portal 目标 `.workbench-generation__canvas` 在 react-flow 下**仍存在**（`GenerationWorkspace` 的 canvas 挂载 div，react-flow 容器挂其内），无需重写。`NodeShotCutPanel` 同理。
 - 含义：S2 内容层整体为「复用」而非「重写」，降低了原评审估算的工作量。`WhiteboardLeaferCanvas`（leafer 深模块）确认为「只改挂载容器」，不动深模块。
 
+**D6｜桥 `toReactFlowEdge` 把 `nomiEdge` 整包进 `data.nomiEdge`，不挂顶层旁路（S3，执行定）**
+- POC 的 `NomiReactFlowEdge = Edge & { nomiEdge?: GenerationCanvasEdge }` 把业务字段挂**边对象顶层旁路**。
+- 源码核查：react-flow 自定义 Edge 组件收的是 `EdgeProps`（`Pick<EdgeType,'id'|'data'|'selected'...>`），**顶层旁路 `nomiEdge` 不会进 `EdgeProps`**——自定义 Edge 读不到。
+- 决策：改挂 `data.nomiEdge`（对齐节点侧 `data.nomiNode` 模式），自定义 Edge 读 `props.data.nomiEdge.mode`。**唯一真相仍在 store**，data 只是投影。
+- 含义：桥测试同步改（`rfEdge.nomiEdge?.mode` → `rfEdge.data.nomiEdge.mode`）。
+
+**D7｜边标签门迁移用 react-flow `EdgeProps.selected` + store `selectedNodeIds`（S3，执行定）**
+- 老画布边点亮靠 `data-incident`（`selectedNodeIds.has(source||target)`）+ `data-active`（activeEdge）。
+- react-flow：`selected` prop（react-flow 侧边选中态）+ store `selectedNodeIds`（节点选区真相）双驱动。边标签「选中节点才浮出」语义保留。
+- 取舍：react-flow 边选中态（selected）是 react-flow 侧状态，不落 store（与节点选区 `selectedNodeIds` 分离，各自持有）。S8 测试迁移时注意区分。
+
+**D8｜S4 交互菜单用 react-flow 官方事件替代自研 pointer 仲裁（S4，执行定）**
+- 老画布 `useCanvasContextNodeMenu.ts`（180 行自研 pointer 仲裁：macOS ctrl+click / chromium 时序 / 右键平移冲突）。
+- react-flow 原生 `onNodeContextMenu`/`onPaneContextMenu` 已处理右键时序。**决策：废弃自研仲裁，用官方事件**（省 180 行，plan D1 本就归 🔵 原生）。
+- 右键菜单 UI（`NodeAddMenu`）+ 建节点逻辑（`addNode`）保留复用。
+- **风险已确认**：react-flow `onNodeContextMenu` 在 macOS 右键行为是否与老画布一致，**S4 真机走查必须验**（若 ctrl+click 冲突，需补 `onPaneContextMenu` 兜底）。
+
+**D9｜放空菜单 `onConnectEnd` 判 `toNode==null`，源节点限定可产媒体（S4，执行定）**
+- 老画布 `useDragToConnect.onDropOnEmpty` → `handleAddConnectedNode`（`addNode`+`startConnection`+`completeNodeConnection`）。
+- react-flow：`onConnectEnd(event, connectionState)`，`connectionState.toNode==null` 即放空；`fromPosition`（Left/Right）编码 side。
+- **取舍**：源节点可产媒体限定对齐老画布（`text/image/video`）；放空建节点走 `startConnection`+`completeNodeConnection`（保留槽满/校验反馈），**不是**裸 `connectNodes`。
+- 依赖：F8 的 Handle 已就位（S2 骨架），`connectionMode={Loose}` 支持放空连线。
+
+**D10｜B2 多分类 viewport 记忆与 B1 变换同步强耦合 → 归 S5 一起做（S4，执行定）**
+- plan 阶段表把 B1/B2/B5 标 S4，但域 B 表把 B1（变换同步）标 S5，矛盾。
+- 源码核查：B2（`useOnViewportChange` 记忆 `categoryViewports`）依赖 B1（`store.canvasZoom/Offset` 同步），当前容器 `fitView={false}`、viewport 恒 `{0,0,1}`，**无 B1 同步时 B2 无意义**。
+- 决策：S4 **不做 B2**，与 B1 一起归 S5（避免在无坐标同步的半成品上做记忆，白做还引入双份状态坑）。S4 已完成的 B5（`screenToFlowPosition` 坐标换算）已随 D1/D2 落地。
+
 ### 已完成 commit 清单
 | commit | 阶段 | 内容 |
 |---|---|---|
@@ -464,14 +493,17 @@
 | `074f959` | S2-STEP2 | image 内容层补全（ImageResultStackControls 堆栈 + ImageCropGridOverlay 裁剪，图片容器改内容驱动高度） |
 | `57b1ac8` | S2-STEP2 | 剩余 kind 接入（text→TextDocumentNode、scene3d→Scene3DEditor、model3d→Model3DViewer、card→NodeCardBody、失败态→NodeErrorReport） |
 | `803e7d6` | S2 | i18n 门岗清零（ReactFlowNode 占位文案改 i18n，13 literal 减到 0） |
-| `[S3]` | S3 | 自定义 Edge（ReactFlowEdge.tsx：getBezierPath+BaseEdge+EdgeLabelRenderer+模式菜单/断开/选中）+ edgeTypes 注册 + 桥 toReactFlowEdge 改 data.nomiEdge + applyEdgeChangesToStore + 测试同步 + lint 清理 |
+| `2372108` | S3 | 自定义 Edge（ReactFlowEdge.tsx：getBezierPath+BaseEdge+EdgeLabelRenderer+模式菜单/断开/选中）+ edgeTypes 注册 + 桥 toReactFlowEdge 改 data.nomiEdge（D6）+ applyEdgeChangesToStore + 测试同步 + lint 清理 |
+| `160f06e` | 计划 | S3 进度日志（状态 + 验收对照 + commit 清单） |
+| `15ebaa5` | S4 | 交互菜单迁移（D1 右键 onNodeContextMenu/onPaneContextMenu 替代自研仲裁 + D2 放空 onConnectEnd + A4-A6 内建框选/连线预览/放空配置） |
 
 ### 进行中 / 下一步
-- **S3 边渲染已接入**（commit 见上清单）。剩：
+- **S3 已接入**、**S4 部分接入**（D1/D2/A4-A6）。剩：
   1. **readOnly 透传**：ReactFlowNode 内 `deps.readOnly` 硬编码 `false`；react-flow 容器 `ReactFlowGenerationCanvas` 有 `readOnly` prop 未传入节点 → S6 分享预览时打通。
   2. **video 浮条**：已通过 `NodeResultDownloadButton`→`NodeVideoFrameToolbar` 链路生效（抽帧/按镜头拆 `NodeShotCutPanel`），无需额外。
   3. **InlineParameterBar / NodeParameterControls**：composer 底栏一部分，随 `NodeGenerationComposer`（已接入）一起复用，不单独接。
-- **下一步 = S4 交互迁移 + 手柄/组框重写**：A4-A8 + B1/B2/B5 + D1/D2/D4 + **F8/F9/F10**（拖/框选/连线/预览线 + 右键/放空菜单 + viewport 记忆 + 手柄迁 `Handle` / 组框"连到整组" / 出端口选择层重写）。
+- **下一步 = S4 剩余**：F8 完整（isValidConnection 校验 + completeNodeConnection 反馈）、F9 组框连整组（connectToGroup + onConnectEnd 命中组框）、F10 出端口选择层重写。
+- **S5 预告**：B1 变换同步（store.canvasZoom/Offset）+ B2 多分类 viewport 记忆（D10 已定一起做）+ B3 自动 fit + C5 minimap/缩放条 + G4/G5 + F7 LOD。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
 - **门岗**：i18n 已清零（`803e7d6`）；filesize 白名单 3 个（`BaseGenerationNode` 超限在白名单，迁移期不处理）；老画布 walk 迁移期可能红（D2 接受）。
 
