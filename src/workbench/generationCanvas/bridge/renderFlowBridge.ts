@@ -23,11 +23,14 @@ export type NomiReactFlowEdge = Edge & { nomiEdge?: GenerationCanvasEdge }
 
 /** store 的 GenerationCanvasNode → react-flow Node（业务字段整包进 data）。 */
 export function toReactFlowNode(node: GenerationCanvasNode): NomiReactFlowNode {
+  // 只塞 width（= 用户缩放后的真实宽 node.size.width），不塞 height：
+  // 节点高度是内容驱动的（resolveNodeVisualSize: resolvePreviewHeight 受 meta.previewHeight 影响，非固定值），
+  // 塞死 height 会与 composer/media 实际渲染高度错位（plan §三.5 补强 5）。高度由 react-flow 自测 DOM。
   return {
     id: node.id,
     position: { x: node.position.x, y: node.position.y },
     data: { nomiNode: node },
-    ...(node.size ? { width: node.size.width, height: node.size.height } : {}),
+    ...(node.size ? { width: node.size.width } : {}),
   }
 }
 

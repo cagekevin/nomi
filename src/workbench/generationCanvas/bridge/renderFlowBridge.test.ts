@@ -34,6 +34,14 @@ describe('store → react-flow 转换', () => {
     expect(rfNode.data.nomiNode.title).toBe('a')
   })
 
+  it('带 size 的节点：只塞 width（缩放后真实宽），不塞 height（高度内容驱动，react-flow 自测）', () => {
+    const sized = { ...node('a', 10, 20), size: { width: 220, height: 500 } }
+    const rfNode = toReactFlowNode(sized)
+    expect(rfNode.width).toBe(220)
+    // 关键契约（plan §三.5 补强 5）：height 不能塞死，让 react-flow 自测内容 DOM。
+    expect(rfNode.height).toBeUndefined()
+  })
+
   it('GenerationCanvasEdge → react-flow Edge：mode 语义旁路保留', () => {
     const rfEdge = toReactFlowEdge({
       id: 'e1',
