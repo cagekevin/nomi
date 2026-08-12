@@ -15,7 +15,7 @@ import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'
 import { ReactFlowNode } from '../nodes/ReactFlowNode'
 import ReactFlowEdge from './ReactFlowEdge'
-import { NodeAddMenu } from './CanvasToolbar'
+import CanvasToolbar, { NodeAddMenu } from './CanvasToolbar'
 import { CanvasEmptyState } from './CanvasEmptyState'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
@@ -58,6 +58,16 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   // S4-B5：client → canvas 坐标换算（react-flow 官方，替代老画布 getCanvasPointFromClientPoint 自研换算）。
   // canvas → screen 用于菜单 DOM 定位（NodeAddMenu 是 absolute 屏幕定位，需相对容器的 screen 坐标）。
   const { screenToFlowPosition, flowToScreenPosition } = useReactFlow()
+
+  // C1 左侧添加节点工具栏：挂容器，落点 = 视口锚（容器 38%/28% 处）→ screenToFlowPosition 转 canvas。
+  // 对齐老画布 getToolbarInsertionPosition（GenerationCanvas.tsx:391-401，默认生成节点落上半区留 composer）。
+  const canvasRef = React.useRef<HTMLDivElement | null>(null)
+  const getInsertionPosition = React.useCallback(() => {
+    const rect = canvasRef.current?.getBoundingClientRect()
+    const anchor = rect ? { x: rect.left + rect.width * 0.38, y: rect.top + rect.height * 0.28 } : { x: 360, y: 280 }
+    const point = screenToFlowPosition(anchor)
+    return { x: Math.round(point.x), y: Math.round(point.y) }
+  }, [screenToFlowPosition])
 
   // 分类过滤：节点无 categoryId 时回退到 project default（shots），与老画布一致（GenerationCanvas.tsx:90-96）。
   const nodes = React.useMemo(() => {
@@ -275,7 +285,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
       data-ready={isReady ? 'true' : undefined}
       data-nomi-generation-canvas-import-target={!readOnly ? 'true' : undefined}
     >
-      <div className="relative w-full h-full min-w-0 min-h-0">
+      <div ref={canvasRef} className="relative w-full h-full min-w-0 min-h-0">
         <ReactFlow
           nodes={rfNodes}
           edges={rfEdges}
@@ -304,6 +314,9 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           maxZoom={3}
           proOptions={{ hideAttribution: true }}
         />
+        {!readOnly ? (
+          <CanvasToolbar getInsertionPosition={getInsertionPosition} categoryId={activeCategoryId} />
+        ) : null}
         {nodes.length === 0 ? (
           <CanvasEmptyState
             activeCategoryId={activeCategoryId}

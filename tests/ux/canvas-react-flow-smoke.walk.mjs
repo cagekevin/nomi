@@ -110,6 +110,13 @@ try {
   const legacyStage = await getWin().locator('.generation-canvas-v2__stage').count()
   assert(legacyStage === 0, '没有老画布 stage（渲染的是 react-flow）')
 
+  // ①.5 左侧加节点工具栏（C1 S2 遗漏补救）：画布上应挂 CanvasToolbar。
+  const canvasToolbar = getWin().locator('.generation-canvas-v2-toolbar')
+  await canvasToolbar.waitFor({ timeout: 5000 })
+  assert(true, '左侧加节点工具栏已挂（.generation-canvas-v2-toolbar）')
+  const toolbarButtons = await canvasToolbar.locator('button').count()
+  assert(toolbarButtons >= 4, '工具栏至少 4 个加节点按钮', `${toolbarButtons} 个`)
+
   // ② 空态 CTA 阶段：空分类显示 CanvasEmptyState（S1 C2），点"新建画面"建首个节点。
   const emptyCta = getWin().locator('button', { hasText: /新建画面/ }).first()
   await emptyCta.waitFor({ timeout: 5000 })

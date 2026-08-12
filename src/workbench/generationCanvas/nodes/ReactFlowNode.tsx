@@ -424,7 +424,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           imageStackOpen,
           onImageStackOpenChange: setImageStackOpen,
           readOnly: false,
-          pendingText: t('generationCommon.node.pending'),
+          pendingText: t('generationCommon.lightweightNode.idle'),
         }, visualSize)}
       </div>
 
