@@ -251,9 +251,50 @@
 - **C5 安全坑（放行交互元素）**：`useNodeDragResize:166` 的 `button/input/textarea/select/[contenteditable]/ProseMirror` 放行逻辑，react-flow 拖拽需等价（子元素可交互不触发拖拽）。
 - **媒体预览反缩放**：`ImageResultStack`/`PanoramaViewer` 等依赖 `canvasZoom` 反缩放的，靠 B1 同步保证，确认无 DOM 选择器后适配。
 
----
+### S2 审计补强（多轮审计后追加，2026-08-12）
 
-## 四、相对 v1/v2 的关键改进（= 用户问的"有没有更优解"的答案）
+> 本节是 S2 执行前的独立审计结论，修正 §三.5 上述子步骤的 4 个缺口。**S2 只做 STEP 1-4**；STEP 5/6/7（F8/F9/F10）是 **S4**，从本节起把阶段归属对齐阶段表（L171 F8/F9/F10 → S4），避免执行时跨阶段混做。
+
+**补强 1｜阶段归属澄清（对齐 §三阶段表）**
+- §三.5 的 STEP 5（F8 手柄）/STEP 6（F9 组框）/STEP 7（F10 出端口）虽排在 S2 章节内，但阶段表把 F8/F9/F10 明确归 **S4**（L171）。**裁决**：S2 = STEP 1-4（F1/F2/F3/F4/F6/F7）+ C1/B6；STEP 5-7 留到 S4。S2 验收不含连线/组框/出端口，避免与 S4 边界混淆。
+
+**补强 2｜STEP 2「拖到时间轴」落点判定缺口**
+- 现状（plan L217）：`onNodeDragStop` 用 `screenToFlowPosition` 判定落点复用 `findTimelineDropTarget`。
+- **源码核实**（`nodeSizing.ts:423-442`）：`findTimelineDropTarget(clientX, clientY)` 内部用 `document.elementsFromPoint(clientX, clientY)` + `closest(TIMELINE_TRACK_CLIPS_SELECTOR)` **全屏命中**，纯 client 坐标 + DOM，**不依赖 stage/offset/zoom**。时间轴拖柄 DOM（`GenerationWorkspace.tsx:119`）在 react-flow 容器外，但 `elementsFromPoint` 覆盖全屏 → 拖出容器命中时间轴**无需额外容器边界判定**，直接 `findTimelineDropTarget(event.clientX, event.clientY)` 复用即可。
+- **真风险点**：react-flow 拖拽节点**拖出容器外**时 `onNodeDragStop` 是否仍触发？react-flow 用 window/document 级 pointer 监听，pointerdown 起始于节点、指针拖出容器后 pointerup 仍会触发 `onNodeDragStop`（标准行为）。**S2 STEP 2 验收必须实测此项**：把节点拖到画布外的时间轴区域，确认 `onNodeDragStop` 触发且 `findTimelineDropTarget` 命中 → 建 clip。若实测不触发，再补容器 onMouseLeave 兜底。
+- 命中后链路：`findTimelineDropTarget`→`clientXToFrame`→`buildGenerationNodeTimelineClip`→`addTimelineClipAtFrame`（`useNodeDragResize:319-344`），原样复用。
+
+**补强 3｜STEP 2「rAF 批处理 + memo 引用稳定」缺口**
+- 风险 L248 只说"memo 改按 react-flow props 比较"，但没说怎么比。react-flow `NodeProps.data.nomiNode` 是 store 节点引用，若每次拖拽 moveNode 都产生**新节点对象**（immer 更新），memo 浅比 data.nomiNode 引用**必然击穿**（每次拖拽帧都重渲内容层）。
+- **修正**（两层）：
+  - ① 容器层（`ReactFlowGenerationCanvas`）：拖拽期间**高频 move 已由 onNodeDrag 的 rAF 批处理节流**（L245 结构），避免 store 更新风暴；拖拽结束才 commit。
+  - ② `BaseGenerationNode` 的 `React.memo` 比较器改为：`prev.data.nomiNode.id === next.data.nomiNode.id` + `prev.selected === next.selected` + `prev.dragging === next.dragging` + `prev.data.nomiNode.generationHash === next.data.nomiNode.generationHash`（内容实质变化的哈希）。这样拖拽（只改 position）不触发内容层重渲，只渲染层 wrapper 移动。
+- **验证**：拖拽节点时内容层（media/preview/composer）不重渲（devtools Performance 观察），松手后一次 commit。
+
+**补强 4｜C1 添加工具栏的落点坐标（S2 内）**
+- B6（plan L83）"工具栏插入点计算用 `screenToFlowPosition`"，依赖 `<ReactFlowProvider>`。S1 容器已包 Provider（`ReactFlowGenerationCanvas` 外层），S2 挂 `CanvasToolbar` 时直接 `useReactFlow().screenToFlowPosition`，**无需再加 Provider**。
+- 但要**先确认** `CanvasToolbar` 的 `onAddNode` 现在喂给谁：老画布是 `GenerationCanvas` 的 `addNodeAtStage`（stage 坐标换算 offset/zoom）。react-flow 下改喂容器层 `screenToFlowPosition` 后的 canvas 坐标 → `addNode`。**落点 = 工具栏按钮触发时的 client 坐标转 flow 坐标**，不能复用老画布的内部换算。
+
+**补强 5｜节点尺寸策略（STEP 1 前置，桥需修正）**
+- **源码核实**：`BaseGenerationNode.tsx:199-201` `visualSize = resolveNodeVisualSize(node)`，是节点可视尺寸单一真相源（连线锚点/最小地图/composer 都用）。`nodeSizing.ts:363-392`：**width 固定**（`cardFixedSize`，如 220px），**height 动态**（`resolvePreviewHeight`，受 `meta.previewHeight`/preview 内容驱动，非固定值）。
+- **问题**：S1 桥 `toReactFlowNode` 把 `node.size` 同时塞进 react-flow `width/height`。若 S2 照此接真实节点，**动态高的卡片会被塞死 height** → 与 composer/media 实际渲染高度错位，连线锚点、自动 fit、edge 锚点全用错高度。
+- **修正**：
+  - ① 桥 `toReactFlowNode` 改为**只塞 `width` = `node.size.width`**（用户缩放后的真实宽，来自 store），**不塞 `height`**，让 react-flow 用 `NodeResizer`/自测 DOM 获取真实高度。注意 `node.size.width` 是用户缩放后的值，≠ `cardFixedSize`（初始固定宽），连线/auto-fit 必须用前者。
+  - ② `BaseGenerationNode` 根元素改 `position:relative`（react-flow node 根），内部保持 `visualSize` 驱动布局（宽度固定，高度由 previewHeight 决定），react-flow 自测到实际 DOM 高度。
+  - ③ 连线锚点/最小地图/auto-fit 依赖的节点尺寸，react-flow 自测 `getNodesBounds` 自动处理，不再手动算。
+- **验证**：文本节点（矮）/图片带结果（高）/音视频节点，各自高度正确；连线锚点贴实际边缘；auto-fit 框住完整节点。
+- **副作用**：S1 桥测试里"塞 height"的断言（`toReactFlowNode` 传 width+height）要同步改为只断言 width。
+
+**S2 的最终验收清单（STEP 1-4 + C1/B6）**
+1. 各 kind 节点在 react-flow 容器显示（16 kind，含 leafer/three 深模块挂载容器透传 `NodeProps`）。
+2. 拖拽无抖动/漂移；松手位置正确；undo 一次入栈（补强 3 验证不重渲）。
+3. 8 向缩放 + 等比锁 + west/north position 反推正确（`onResize` 移植）。
+4. composer/参数条随节点/缩放/切分类不漂移、翻转正确、不被 timeline 遮挡（STEP 3）。
+5. 浮条拖拽隐身、松手恢复、贴边方向正确（STEP 4，`setCanvasDragging` 驱动）。
+6. 添加工具栏建节点落点 = 触发处 client→flow 坐标（补强 4）。
+7. 出现动画（F6）、内容层 LOD 分流不破坏（F7）。
+
+
 
 1. **自研渲染全删**：A 域（框选/拖线预览/选区外框/选区几何）v1 用 react-flow 内建但**没删老自研代码**、v2 才意识到——现在明确"🔵 原生 = 删干净"，不留双实现。
 2. **变换同步弃轮询**：老 `useCanvasTransformStoreSync` 若依赖轮询/事件，改用官方 `useOnViewportChange`（更干净）。v1/v2 都手动 `onMove` 写 store，现在用官方 hook 替代。
