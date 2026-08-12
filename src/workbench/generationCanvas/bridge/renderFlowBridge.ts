@@ -18,8 +18,13 @@ export type NomiNodeData = {
   nomiNode: GenerationCanvasNode
 }
 
+export type NomiEdgeData = {
+  /** Nomi 边业务语义整包进 data（mode/order/viaGroupId 等，react-flow 无此概念），自定义 Edge 渲染读取。 */
+  nomiEdge: GenerationCanvasEdge
+}
+
 export type NomiReactFlowNode = Node<NomiNodeData>
-export type NomiReactFlowEdge = Edge & { nomiEdge?: GenerationCanvasEdge }
+export type NomiReactFlowEdge = Edge<NomiEdgeData>
 
 /** store 的 GenerationCanvasNode → react-flow Node（业务字段整包进 data）。 */
 export function toReactFlowNode(node: GenerationCanvasNode): NomiReactFlowNode {
@@ -34,14 +39,14 @@ export function toReactFlowNode(node: GenerationCanvasNode): NomiReactFlowNode {
   }
 }
 
-/** store 的 GenerationCanvasEdge → react-flow Edge（业务 mode/order 挂边对象旁路）。 */
+/** store 的 GenerationCanvasEdge → react-flow Edge（业务 mode/order 整包进 data，自定义 Edge 渲染读取）。 */
 export function toReactFlowEdge(edge: GenerationCanvasEdge): NomiReactFlowEdge {
   return {
     id: edge.id,
     source: edge.source,
     target: edge.target,
-    // mode/order 是 Nomi 边语义（react-flow 无此概念），旁路挂上供自定义 Edge 渲染读取。
-    nomiEdge: edge,
+    // mode/order 是 Nomi 边语义（react-flow 无此概念），整包进 data.nomiEdge（对齐节点 data.nomiNode 模式）。
+    data: { nomiEdge: edge },
   }
 }
 
@@ -91,4 +96,27 @@ export function applyDragSettledToStore(nodeId: string, position: { x: number; y
 export function applyConnectionToStore(connection: Connection): void {
   if (!connection.source || !connection.target) return
   useGenerationCanvasStore.getState().connectNodes(connection.source, connection.target)
+}
+
+/**
+ * react-flow 的 onEdgesChange → 回写 store。
+ * - remove change（选中边按 Delete / 删除键）→ store.disconnectEdge（含组 scope 语义，见 canvasGraphActions）。
+ * - 其余变更（selection 等）由 react-flow 侧持有（边选区不落 store），在此不处理。
+ */
+export function applyEdgeChangesToStore(changes: import('@xyflow/react').EdgeChange<NomiReactFlowEdge>[]): void {
+  for (const change of changes) {
+    if (change.type === 'remove') {
+      useGenerationCanvasStore.getState().disconnectEdge(change.id)
+    }
+  }
+}
+
+/** 边模式切换 → store.updateEdgeMode（自定义 Edge 内模式菜单触发）。 */
+export function applyEdgeModeToStore(edgeId: string, mode: NonNullable<GenerationCanvasEdge['mode']>): void {
+  useGenerationCanvasStore.getState().updateEdgeMode(edgeId, mode)
+}
+
+/** 断开边 → store.disconnectEdge（自定义 Edge 内模式菜单剪刀触发）。 */
+export function applyDisconnectToStore(edgeId: string): void {
+  useGenerationCanvasStore.getState().disconnectEdge(edgeId)
 }

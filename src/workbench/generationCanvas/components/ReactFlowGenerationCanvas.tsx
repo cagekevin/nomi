@@ -8,12 +8,13 @@
 // S2 才接真实内容层节点（BaseGenerationNode nodeTypes）；本阶段用最简卡片渲染，验证桥闭环。
 import React from 'react'
 import { useTranslation } from 'react-i18next'
-import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Connection, type NodeProps, type NodeTypes } from '@xyflow/react'
+import { ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, type Connection, type NodeTypes, type EdgeTypes } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { cn } from '../../../utils/cn'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { useWorkbenchStore } from '../../workbenchStore'
 import { ReactFlowNode } from '../nodes/ReactFlowNode'
+import ReactFlowEdge from './ReactFlowEdge'
 import { CanvasEmptyState } from './CanvasEmptyState'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME } from '../../assets/assetLibraryDrag'
@@ -25,6 +26,7 @@ import {
 import {
   applyConnectionToStore,
   applyDragSettledToStore,
+  applyEdgeChangesToStore,
   applyNodeChangesToStore,
   toReactFlowEdges,
   toReactFlowNodes,
@@ -34,6 +36,10 @@ import {
 
 const nodeTypes: NodeTypes = {
   default: ReactFlowNode,
+}
+
+const edgeTypes: EdgeTypes = {
+  default: ReactFlowEdge,
 }
 
 /** S1 容器：包 ReactFlowProvider，供后续 screenToFlowPosition 等（S4/S5）。 */
@@ -69,7 +75,7 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   React.useEffect(() => {
     setRfNodes(toReactFlowNodes(nodes))
     setRfEdges(toReactFlowEdges(edges))
-  }, [nodes, edges])
+  }, [nodes, edges, setRfEdges, setRfNodes])
 
   // 回写半程：react-flow 事件 → 桥 → store。
   const handleNodesChange = React.useCallback(
@@ -89,6 +95,15 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const handleConnect = React.useCallback((connection: Connection) => {
     applyConnectionToStore(connection)
   }, [])
+
+  // 边变更回写：remove（选中边按 Delete）→ store.disconnectEdge；selection 不落 store（react-flow 侧持有）。
+  const handleEdgesChange = React.useCallback(
+    (changes: Parameters<typeof onEdgesChange>[0]) => {
+      onEdgesChange(changes) // 先本地响应（删除即时）
+      applyEdgeChangesToStore(changes) // 回写 store（真相源）
+    },
+    [onEdgesChange],
+  )
 
   const handleStageDrop = React.useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
@@ -132,8 +147,9 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           nodes={rfNodes}
           edges={rfEdges}
           nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
           onNodesChange={handleNodesChange}
-          onEdgesChange={onEdgesChange}
+          onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
           onNodeDragStop={handleNodeDragStop}
           onDrop={handleStageDrop}

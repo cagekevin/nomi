@@ -43,7 +43,7 @@ describe('store → react-flow 转换', () => {
     expect(rfNode.height).toBeUndefined()
   })
 
-  it('GenerationCanvasEdge → react-flow Edge：mode 语义旁路保留', () => {
+  it('GenerationCanvasEdge → react-flow Edge：mode 语义整包进 data.nomiEdge（对齐节点 data.nomiNode）', () => {
     const rfEdge = toReactFlowEdge({
       id: 'e1',
       source: 'a',
@@ -53,7 +53,8 @@ describe('store → react-flow 转换', () => {
     })
     expect(rfEdge.source).toBe('a')
     expect(rfEdge.target).toBe('b')
-    expect(rfEdge.nomiEdge?.mode).toBe('reference')
+    expect(rfEdge.data.nomiEdge.mode).toBe('reference')
+    expect(rfEdge.data.nomiEdge.order).toBe(1)
   })
 
   it('snapshotToReactFlow 返回 store 当前全部 nodes/edges（单向桥渲染半程）', () => {
