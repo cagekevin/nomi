@@ -505,6 +505,9 @@
 | `2372108` | S3 | 自定义 Edge（ReactFlowEdge.tsx：getBezierPath+BaseEdge+EdgeLabelRenderer+模式菜单/断开/选中）+ edgeTypes 注册 + 桥 toReactFlowEdge 改 data.nomiEdge（D6）+ applyEdgeChangesToStore + 测试同步 + lint 清理 |
 | `160f06e` | 计划 | S3 进度日志（状态 + 验收对照 + commit 清单） |
 | `15ebaa5` | S4 | 交互菜单迁移（D1 右键 onNodeContextMenu/onPaneContextMenu 替代自研仲裁 + D2 放空 onConnectEnd + A4-A6 内建框选/连线预览/放空配置） |
+| `7bcc71e` | S4-F8 | 连线校验（isValidConnection + canConnectNodes 粗校验，D11 方案 B） |
+| `e6427e9` | 测试 | react-flow 画布 smoke walk（S4 走查基线，10 项断言） |
+| `d071f03` | S4-A4 | 修复节点选中态失效（选区同步缺失：select change 回写 store + toReactFlowNode 投影 selected） |
 
 ### 进行中 / 下一步
 - **S3 已接入**、**S4 部分接入**（D1/D2/A4-A6）。剩：
@@ -514,7 +517,7 @@
 - **S4 进度**：D1 右键 ✅ / D2 放空 ✅ / A4-A6 内建 ✅ / F8 连线校验 ✅（isValidConnection，D11）。
 - **下一步 = S4 剩余 F9/F10（重写级）**：F9 组框连整组（connectToGroup 依赖 pending 语义，react-flow 需 onConnectEnd 命中组框重新实现）、F10 出端口选择层重写。
 - **✅ 暂停点解除（2026-08-12）**：新增 `tests/ux/canvas-react-flow-smoke.walk.mjs`（react-flow 画布真机自动化基线，10 项断言全绿）。验证了 S3/S4 核心增量真机可用：react-flow 容器出现、空态 CTA 建节点、右键菜单（D1）建节点 + 关闭、零页面错误。
-- **已知问题（待修）**：ReactFlowNode 选中视觉态在 react-flow 画布未生效——`selected && 'border-nomi-accent ring-2 ring-nomi-accent/30'`（ReactFlowNode L365）的 Tailwind JIT 动态拼接类未扫到/未编译，wrapper `.selected` 也未出现（react-flow custom node 选中态传递待核）。不影响功能逻辑（store `selectedNodeIds` 仍正确），仅视觉。**建议放到 S8 测试迁移/真机走查阶段修复**。
+- **✅ 选中态问题已修（2026-08-12，commit `d071f03`）**：根因是 **A4 选区同步缺失**——react-flow 点击选中是内部状态，桥 `applyNodeChangesToStore` 忽略 select change，`store.selectedNodeIds` 未更新 → 渲染半程 `setRfNodes` 全量覆盖 → 选中态丢失（wrapper 无 `.selected`、inner 无 `border-nomi-accent`）。**修**：桥处理 select change 回写 store + `toReactFlowNode` 从 `store.selectedNodeIds` 投影 selected。smoke walk 恢复选中断言，11/11 全绿。
 - **下一步**：F9 组框连整组（connectToGroup + onConnectEnd 命中组框）+ F10 出端口选择层重写。真机基线已立，可继续。
 - **S5 预告**：B1 变换同步（store.canvasZoom/Offset）+ B2 多分类 viewport 记忆（D10 已定一起做）+ B3 自动 fit + C5 minimap/缩放条 + G4/G5 + F7 LOD。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
