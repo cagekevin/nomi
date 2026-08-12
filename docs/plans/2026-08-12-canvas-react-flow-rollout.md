@@ -447,11 +447,12 @@
 | `2a64ab7` | S2-STEP2 | 内容层 kind 分发 + AudioStripNode |
 | `43cc7ee` | S2-STEP2 | image 内容层（DeferredNodeImage + NodeInlineImageTitle） |
 | `6d564c3` | S2-STEP2 | video 内容层（NodeVideoPlaybackGuard 自愈播放） |
+| `47d72f3` | S2-STEP3 | NodeToolbar 接入（官方浮动层，选中显示生成入口占位） |
 
 ### 进行中 / 下一步
+- S2 STEP 3 剩余：composer 完整内容接入 `NodeToolbar`（当前仅占位入口，完整 composer 需去掉 `useComposerViewportPlacement` 自研定位）。
 - S2 STEP 2 剩余：image 裁剪 `ImageCropGridOverlay`（可复用）；需小改 `ImageResultStackControls`；必须重写 `PanoramaViewer`/`WhiteboardLeaferCanvas`/`NodeMediaPreviewDialog`。
-- S2 STEP 3：composer 用 `NodeToolbar`。
-- S2 STEP 4：浮动工具条用 `NodeToolbar`。
+- S2 STEP 4：浮动工具条完整接入 `NodeToolbar`。
 - S2 STEP 2 拖拽/缩放副作用迁移（`onNodeDrag`/`onResize`）。
 - **未验收项**（§六总验收）：react-flow 画布全功能真机、agent 操作画布、跨模块 DOM 契约（域 H）。
 
@@ -460,9 +461,10 @@
 - ✅ audio/text 内容层（AudioStripNode）
 - ✅ image 内容层（DeferredNodeImage + NodeInlineImageTitle）
 - ✅ video 内容层（NodeVideoPlaybackGuard 自愈播放）
+- ✅ NodeToolbar 官方浮动层机制（选中显示，生成入口占位）
+- ⏳ composer 完整内容（NodeToolbar）
 - ⏳ image 裁剪、panorama、whiteboard、preview 弹窗
-- ⏳ composer（NodeToolbar）
-- ⏳ 浮动工具条（NodeToolbar）
+- ⏳ 浮动工具条完整（NodeToolbar）
 - ⏳ 拖拽/缩放副作用迁移
 - ⏳ 连线 Handle（S4）
 
