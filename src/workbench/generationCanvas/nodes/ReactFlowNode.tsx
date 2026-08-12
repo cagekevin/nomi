@@ -11,6 +11,7 @@
 import React from 'react'
 import { Handle, NodeResizer, NodeToolbar, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '../../../utils/cn'
+import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
@@ -114,13 +115,22 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
         data-node-id={node.id}
         style={{ width: node.size?.width ?? 220 }}
       >
-      {/* 8 向缩放（react-flow 官方，替代自研 resize 热区；S2 STEP 2 接 Aspect 锁比） */}
+      {/* 8 向缩放（react-flow 官方，替代自研 resize 热区）。
+          媒体节点（image/video）开 keepAspectRatio 等比锁（react-flow 内置，等价老画布 meta 比例锁——
+          节点初始尺寸即按预览比例算，当前比例锁 = 保持初始正确比例）。
+          onResizeEnd 松手一次回写 store.size（真相源），避免缩放中每帧写 store。 */}
       <NodeResizer
         isVisible={selected}
         minWidth={120}
         minHeight={80}
+        keepAspectRatio={isImageLikeGenerationNodeKind(node.kind) || isVideoLikeGenerationNodeKind(node.kind)}
         lineClassName="border-nomi-accent"
         handleClassName="bg-nomi-accent"
+        onResizeEnd={(_event, params) => {
+          useGenerationCanvasStore.getState().updateNode(node.id, {
+            size: { width: params.width, height: params.height },
+          })
+        }}
       />
 
       {/* 连线手柄骨架（S4 接入完整连接语义，先占位防止未来 break） */}
