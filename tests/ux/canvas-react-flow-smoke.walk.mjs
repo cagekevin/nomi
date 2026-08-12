@@ -152,16 +152,28 @@ try {
   const labelsBefore = await getWin().locator('.react-flow__edge').count()
   assert(labelsBefore === 0, '当前无连线（无 react-flow__edge）', `${labelsBefore}`)
 
-  // ⑥ 选中节点：点第一个 react-flow__node 中心，验证选中不报错。
-  // 已知问题：ReactFlowNode 选中视觉类（border-nomi-accent）依赖 Tailwind JIT 扫到动态拼接类，
-  // 当前 wrapper .selected 类也未出现（react-flow custom node 选中态可能不传 wrapper）。这里只断言
-  // 点击不报错 + react-flow 选中机制不崩溃，留到真机/后续修（已在 plan 待办）。
+  // ⑥ 选中节点：点第一个 react-flow__node 中心，断言选中态生效（A4 选区同步修复后）。
+  // 根因修复：桥 applyNodeChangesToStore 处理 select change 回写 store.selectedNodeIds，
+  // toReactFlowNode 从 store.selectedNodeIds 投影 selected（wrapper 应出现 .selected / inner 出现 border-nomi-accent）。
   const targetNode = getWin().locator('.react-flow__node').first()
   const targetBox = await targetNode.boundingBox()
   if (targetBox) {
     await getWin().mouse.click(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2)
-    await getWin().waitForTimeout(400)
+    await getWin().waitForTimeout(500)
   }
+  const selectionProbe = await getWin().evaluate(() => {
+    const wrapper = document.querySelector('.react-flow__node')
+    const inner = wrapper?.querySelector('.generation-canvas-v2-node')
+    return {
+      wrapperClass: wrapper?.className || null,
+      innerClass: inner?.className || null,
+    }
+  })
+  console.log(`  · 选中态：wrapper=${selectionProbe.wrapperClass} | inner=${selectionProbe.innerClass}`)
+  const isSelected =
+    (selectionProbe.wrapperClass?.includes('selected') ?? false) ||
+    (selectionProbe.innerClass?.includes('border-nomi-accent') ?? false)
+  assert(isSelected, '点节点后选中态生效（A4 选区同步）', JSON.stringify(selectionProbe))
   await snap('05-node-selected.png')
 
   // ⑦ 全程无页面错误。

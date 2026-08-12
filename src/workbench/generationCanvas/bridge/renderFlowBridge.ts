@@ -32,10 +32,12 @@ export function toReactFlowNode(node: GenerationCanvasNode): NomiReactFlowNode {
   // 只塞 width（= 用户缩放后的真实宽 node.size.width），不塞 height：
   // 节点高度是内容驱动的（resolveNodeVisualSize: resolvePreviewHeight 受 meta.previewHeight 影响，非固定值），
   // 塞死 height 会与 composer/media 实际渲染高度错位（plan §三.5 补强 5）。高度由 react-flow 自测 DOM。
+  const selected = useGenerationCanvasStore.getState().selectedNodeIds.includes(node.id)
   return {
     id: node.id,
     position: { x: node.position.x, y: node.position.y },
     data: { nomiNode: node },
+    ...(selected ? { selected: true } : {}),
     ...(node.size ? { width: node.size.width } : {}),
   }
 }
@@ -77,11 +79,31 @@ export function snapshotToReactFlow(): { nodes: NomiReactFlowNode[]; edges: Nomi
  * - 其余变更（selection 等）不在此处理，选区由 store.selectedNodeIds 主导（react-flow 侧不持有真相）。
  */
 export function applyNodeChangesToStore(changes: NodeChange<NomiReactFlowNode>[]): void {
+  // react-flow 的 select change 是逐节点增量（{type:'select', id, selected}），一次可能带多条。
+  // 累积成最终 selectedNodeIds 一次写 store（真相源），避免每条都触发 store 更新风暴。
+  let selectedDirty = false
+  let selectedIds: string[] | null = null
   for (const change of changes) {
     if (change.type === 'remove') {
       useGenerationCanvasStore.getState().deleteNode(change.id)
+      continue
+    }
+    if (change.type === 'select') {
+      // 懒初始化：首次拿到 select change 时才快照当前 store 选区。
+      if (selectedIds === null) {
+        selectedIds = [...useGenerationCanvasStore.getState().selectedNodeIds]
+        selectedDirty = true
+      }
+      if (change.selected) {
+        if (!selectedIds.includes(change.id)) selectedIds.push(change.id)
+      } else {
+        selectedIds = selectedIds.filter((id) => id !== change.id)
+      }
     }
     // position change 在拖拽结束经 applyDragSettledToStore 一次回写（见容器 onNodeDragStop）。
+  }
+  if (selectedDirty && selectedIds !== null) {
+    useGenerationCanvasStore.getState().selectNodes(selectedIds)
   }
 }
 

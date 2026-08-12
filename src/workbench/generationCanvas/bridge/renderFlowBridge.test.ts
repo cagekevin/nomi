@@ -98,6 +98,24 @@ describe('react-flow 事件 → store 回写', () => {
     expect(canConnectNodes('a', 'b')).toBe(true)
   })
 
+  it('toReactFlowNode 带 selected（从 store.selectedNodeIds 投影，A4 选区同步）', () => {
+    // 未选中时 selected 不设
+    const unselected = toReactFlowNode(node('a', 10, 20))
+    expect(unselected.selected).toBeUndefined()
+    // 选中后 selected=true
+    useGenerationCanvasStore.getState().selectNodes(['a'])
+    const selected = toReactFlowNode(node('a', 10, 20))
+    expect(selected.selected).toBe(true)
+  })
+
+  it('select change → store.selectNodes（react-flow 增量选中回写 store，A4）', () => {
+    applyNodeChangesToStore([{ id: 'a', type: 'select', selected: true }])
+    expect(useGenerationCanvasStore.getState().selectedNodeIds).toContain('a')
+    // 取消选中
+    applyNodeChangesToStore([{ id: 'a', type: 'select', selected: false }])
+    expect(useGenerationCanvasStore.getState().selectedNodeIds).not.toContain('a')
+  })
+
   it('回写后 store 变更能再次经 snapshotToReactFlow 反映（双向闭环成立）', () => {
     // 拖拽结束回写
     applyDragSettledToStore('a', { x: 50, y: 60 })
