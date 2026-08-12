@@ -321,6 +321,57 @@
 3. **含义**：补强 6 的"禁止直接改 `BaseGenerationNode` props 契约"**解除**——既然老画布兼容性可下降，`BaseGenerationNode` 可直接改造为 react-flow 自定义节点（`NodeProps` 契约），不必保留老画布 props 契约。老画布代码保留但功能契约可能回归，迁移期开发态接受，S7 删老画布后一致。
 4. **取舍**：放弃"画布缩小看全局时工具条恒可点"旧体验；老画布 walk/e2e 门岗在 S2-S6 可能变红，接受（开发态不真机用，最终以 react-flow 画布验收为准）。**硬红线保留**：store 坐标语义不变（§四.5）、IPC/桥/门岗不含画布功能的仍全过。
 
+**S2 功能迁移映射表（STEP 1-4 + C1/B6，执行检查单，2026-08-12）**
+
+> 每行 = 一个功能副作用 → 迁移目标。**没在表里的副作用默认放弃**（迁移期接受，最终以 react-flow 画布验收为准）。业务逻辑（非渲染）优先保留迁移。
+
+**STEP 1｜内容层（BaseGenerationNode 内）**
+| 功能（源码） | 迁移目标 | 保留/放弃 |
+|---|---|---|
+| 节点 transform/尺寸（L289-290）| react-flow 管节点 position/width | 保留（迁 react-flow）|
+| 自研拖拽 onPointerDown/Move/Up（L295-297）| 删，react-flow `onNodeDrag/onNodeDragStop`（容器层）| 迁 STEP 2 |
+| resize 热区（L689-717）| react-flow `<NodeResizer>` | 迁 STEP 2 |
+| 连接手柄 MagneticConnectionHandle（L301-372）| react-flow `<Handle>` | **S4 做**，S2 节点暂无线 |
+| composer 面板（NodeGenerationComposer）| `NodeToolbar` 定位 | 保留（业务逻辑），定位迁 NodeToolbar |
+| 浮动工具条（NodeFloatingToolbar）| `NodeToolbar` 定位 | 保留，定位迁 NodeToolbar |
+| 图片堆栈（ImageResultStack）| 删 `group-data-[dragging]`（L122）| 保留（纯渲染）|
+| 反缩放 scale(1/canvasZoom)（3 处）| 删 | 放弃（定案）|
+| composer 视口定位 useComposerViewportPlacement | 废弃 | 定位迁 NodeToolbar；**翻转/避让逻辑评估保留否** |
+
+**STEP 2｜拖拽/缩放副作用（useNodeDragResize 内容）**
+| 功能（副作用） | 迁移目标 | 保留/放弃 |
+|---|---|---|
+| rAF 批处理 move（节流 store 更新）| react-flow `onNodeDrag`（容器层 rAF 节流）| 保留 |
+| 拖拽中 setCanvasDragging(true) | `onNodeDragStart/Stop` | 保留（驱动连选中/浮条行为）|
+| 松手 emitCanvasGesture('canvas.node.moved') | `onNodeDragStop` | 保留 |
+| 松手 commitPersistedChange（undo 一次）| `onNodeDragStop` | 保留 |
+| 拖到时间轴建 clip（findTimelineDropTarget）| `onNodeDragStop` 复用 `findTimelineDropTarget`（nodeSizing.ts:423）| 保留（补强 2 实测）|
+| Aspect 锁比 + west/north position 反推 | `<NodeResizer onResize>` | 保留 |
+| collapseSelection / captureHistory | store actions 不变 | 保留 |
+
+**STEP 3｜composer 定位**
+| 功能 | 迁移目标 | 保留/放弃 |
+|---|---|---|
+| composer 随节点定位 | `NodeToolbar`（官方，position 驱动）| 保留 |
+| 上下翻转（超出画布翻到上方）| **放弃**（官方 NodeToolbar 无翻转，用 position 固定侧，用户拍板 2026-08-12 "用官方建议"）| 放弃 |
+| 横向夹取 / 避让 timeline | **放弃**（react-flow 不感知 timeline DOM，官方无此机制；用户拍板 2026-08-12）| 放弃 |
+| 反缩放（L483,491）| 删 | 放弃（定案）|
+
+**STEP 4｜浮动工具条**
+| 功能 | 迁移目标 | 保留/放弃 |
+|---|---|---|
+| 4 处复用（图片/视频/全景/结果下载）| `NodeToolbar`（nodeId 支持多节点/分组）| 保留 |
+| 拖拽中隐身（group-data-dragging）| NodeToolbar isVisible 由 selected/dragging 控制 | 保留 |
+| 贴边方向 | NodeToolbar position（Top/Bottom/Left/Right）| 保留 |
+| 反缩放（L28,31）| 删（NodeToolbar 原生不随 viewport）| 放弃 hack |
+
+**C1/B6｜添加工具栏**
+| 功能 | 迁移目标 | 保留/放弃 |
+|---|---|---|
+| 工具栏建节点 | 容器 `onAddNode` + `screenToFlowPosition` 落点 | 保留 |
+
+> **NodeToolbar 定案（用户拍板 2026-08-12）**：工具条/composer **用官方 `NodeToolbar`**（NodeToolbar.d.ts:4 "doesn't scale with the viewport"）——官方实现自动保持恒定屏幕尺寸，非 CSS 反缩放 hack。这既符合"按官方建议"，又保留了旧画布"工具条恒可点"的体验（用正确实现替代 hack）。**放弃的是 `scale(1/canvasZoom)` hack 和 DOM 几何翻转/避让，不是恒定尺寸体验本身**。
+
 **S2 的最终验收清单（STEP 1-4 + C1/B6，按定案修订）**
 1. 各 kind 节点在 react-flow 容器显示（16 kind，含 leafer/three 深模块挂载容器透传 `NodeProps`）。
 2. 拖拽无抖动/漂移；松手位置正确；undo 一次入栈（补强 3 验证不重渲）。
