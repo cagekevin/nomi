@@ -13,7 +13,9 @@ import { Handle, NodeResizer, Position, type NodeProps } from '@xyflow/react'
 import { cn } from '../../../utils/cn'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
-import { isAudioLikeGenerationNodeKind } from '../model/generationNodeKinds'
+import { DeferredNodeImage } from './DeferredNodeMedia'
+import { NodeInlineImageTitle } from './NodeImagePreviewActions'
+import { isAudioLikeGenerationNodeKind, isImageLikeGenerationNodeKind } from '../model/generationNodeKinds'
 
 /** 节点状态徽标文案映射（skeleton，内容层细化在后续 STEP）。 */
 const STATUS_TEXT: Record<string, string> = {
@@ -28,11 +30,34 @@ const STATUS_TEXT: Record<string, string> = {
 /**
  * 节点内容层按 kind 分发（S2 STEP 2，复用老画布引擎无关的 body，按 code-explorer 判定表）：
  * - audio/text：AudioStripNode（可直接复用，seek 归一化坐标，无自研 DOM 契约）
+ * - image：DeferredNodeImage 媒体预览 + NodeInlineImageTitle 内联标题（均无画布 DOM 耦合，可直接复用）
  * - 其余 kind：先占位，后续 STEP 逐个接入（可复用的搬 / 需小改的删 DOM 契约 / 必须重写的按官方机制）
  */
-function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode']): JSX.Element {
+function renderNodeBody(node: NomiReactFlowNode['data']['nomiNode'], selected: boolean): JSX.Element {
   if (isAudioLikeGenerationNodeKind(node.kind)) {
     return <AudioStripNode node={node} />
+  }
+  if (isImageLikeGenerationNodeKind(node.kind)) {
+    const imageUrl = node.result?.url || node.result?.thumbnailUrl
+    if (!imageUrl) {
+      return (
+        <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
+          <span>内容层（{node.kind}，S2 后续 STEP 接入）</span>
+          <span className="opacity-60">{node.prompt ? '· 有 prompt ·' : '· 空节点 ·'}</span>
+        </div>
+      )
+    }
+    return (
+      <div className="relative h-[140px] w-full overflow-hidden bg-workbench-bg/40">
+        <DeferredNodeImage
+          src={imageUrl}
+          alt={node.title || node.id}
+          className="h-full w-full object-cover"
+          placeholderClassName="bg-workbench-bg/40"
+        />
+        <NodeInlineImageTitle nodeId={node.id} value={node.title || node.id} selected={selected} />
+      </div>
+    )
   }
   return (
     <div className="flex h-[120px] flex-col items-center justify-center gap-1 bg-workbench-bg/40 px-3 text-caption text-nomi-ink-60">
@@ -92,7 +117,7 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       </div>
 
       {/* 节点主体：按 kind 分发内容层 */}
-      <div className="w-full">{renderNodeBody(node)}</div>
+      <div className="w-full">{renderNodeBody(node, selected)}</div>
 
       {/* 状态行（progress 骨架） */}
       {status === 'running' && node.progress ? (
