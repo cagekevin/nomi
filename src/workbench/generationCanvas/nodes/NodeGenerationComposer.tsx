@@ -611,7 +611,7 @@ export default function NodeGenerationComposer({ node, visualSize, positionMode 
         <NodeParameterControls
           node={node}
           section="parameters"
-          composerAttachmentSide={flipUp ? 'top' : 'bottom'}
+          composerAttachmentSide="bottom"
         />
         {/* 手动运镜（B1）：视频镜头才有 video_ref 槽——运镜芯片仅对 video-like 节点显示（AI 工具 create_camera_move 的第二道门，共用同一产路）。 */}
         {isVideoLikeGenerationNodeKind(node.kind) && !node.locked ? (
