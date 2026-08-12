@@ -72,7 +72,11 @@ const HandbookPanel = lazyWithChunkBoundary('上手手册', () =>
 // 画布渲染引擎切换开关（plan §〇.5 准备 2 / S1）：
 // 默认 false = 老自研画布；true = react-flow 渲染层（迁移阶段真机对比用，env 或常量，非运行时注入）。
 // 用 VITE_ 环境变量覆盖：默认老画布，开发/测试设 VITE_RENDER_CANVAS_WITH_REACT_FLOW=true 切新画布。
-const RENDER_CANVAS_WITH_REACT_FLOW = import.meta.env.VITE_RENDER_CANVAS_WITH_REACT_FLOW === 'true'
+// 项目未引入 vite/client 类型（tsconfig.app.json 无 types），import.meta.env 无类型声明；
+// 此处补局部类型安全读取（运行时 Vite 已注入 import.meta.env）。
+const renderCanvasWithReactFlow =
+  typeof import.meta !== 'undefined' &&
+  (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_RENDER_CANVAS_WITH_REACT_FLOW === 'true'
 
 const GenerationCanvas = lazyWithChunkBoundary(
   '生成画布',
@@ -728,7 +732,7 @@ export default function NomiStudioApp(): JSX.Element {
             <React.Suspense fallback={<GenerationCanvasLoading />}>
               {/* relative 包一层:S2b 计划 overlay 与画布同坐标系,且不喂巨壳 */}
               <div className={cn('relative w-full h-full')}>
-                {RENDER_CANVAS_WITH_REACT_FLOW ? <ReactFlowGenerationCanvas /> : <GenerationCanvas />}
+                {renderCanvasWithReactFlow ? <ReactFlowGenerationCanvas /> : <GenerationCanvas />}
                 {hasPendingSpendConfirm ? (
                   <React.Suspense fallback={null}>
                     <SpendConfirmDialog />
