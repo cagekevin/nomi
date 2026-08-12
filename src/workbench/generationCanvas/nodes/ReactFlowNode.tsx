@@ -18,7 +18,7 @@ import { cn } from '../../../utils/cn'
 import { lazyWithChunkBoundary } from '../../../ui/chunkBoundary'
 import { useGenerationCanvasStore } from '../store/generationCanvasStore'
 import { resolveNodeVisualSize } from './nodeSizing'
-import { regenerateNodeInPlace } from '../runner/generationRunController'
+import { confirmAndRunNode, regenerateNodeInPlace } from '../runner/generationRunController'
 import type { NomiReactFlowNode } from '../bridge/renderFlowBridge'
 import AudioStripNode from './render/AudioStripNode'
 import { DeferredNodeImage } from './DeferredNodeMedia'
@@ -35,6 +35,9 @@ import ImageCropGridOverlay, { type CropGridResult, type CropGridSize } from './
 import { ImageResultStackControls } from './ImageResultStack'
 import { useNodePanoramaHandlers } from './useNodePanoramaHandlers'
 import { useResultDownload } from './useResultDownload'
+import { NodeCardBody } from './render/NodeCardBody'
+import { NodeErrorReport } from './NodeErrorReport'
+import { resolveNodeRenderKind, isCardRenderKind } from './resolveRenderKind'
 import {
   FloatingToolbarShell,
   TOOLBAR_ICON as TBI,
@@ -49,6 +52,9 @@ import {
 
 const NodeGenerationComposer = lazyWithChunkBoundary('节点生成面板', () => import('./NodeGenerationComposer'))
 const PanoramaViewer = lazyWithChunkBoundary('全景预览', () => import('./PanoramaViewer'))
+const TextDocumentNode = lazyWithChunkBoundary('文本节点编辑器', () => import('./render/TextDocumentNode'))
+const Scene3DEditor = lazyWithChunkBoundary('3D 场景编辑器', () => import('./Scene3DEditor'))
+const Model3DViewer = lazyWithChunkBoundary('3D 模型预览', () => import('./model3d/Model3DViewer'))
 
 /** 节点状态徽标文案映射（skeleton，内容层细化在后续 STEP）。 */
 const STATUS_TEXT: Record<string, string> = {
@@ -115,6 +121,31 @@ function renderNodeBody(
       </div>
     )
   }
+  // text：ProseMirror（tiptap）可编辑文本 body，引擎无关直接复用。
+  if (node.kind === 'text') {
+    return (
+      <div className="h-full w-full">
+        <React.Suspense fallback={<div className="h-full w-full bg-workbench-bg/40" />}>
+          <TextDocumentNode node={node} />
+        </React.Suspense>
+      </div>
+    )
+  }
+  // scene3d：Scene3DEditor 整卡（内部含 TrajectoryRenderer/SceneContent，R3F 引擎无关）。
+  if (node.kind === 'scene3d') {
+    return (
+      <div className="h-full w-full">
+        <React.Suspense fallback={<div className="h-full w-full bg-workbench-bg/40" />}>
+          <Scene3DEditor node={node} width={visualSize.width} height={visualSize.height} readOnly={deps.readOnly} />
+        </React.Suspense>
+      </div>
+    )
+  }
+  // 卡片 kind（character/scene/audio/whiteboard）：NodeCardBody 按 renderKind 分发 body，引擎无关。
+  const renderKind = resolveNodeRenderKind(node)
+  if (isCardRenderKind(renderKind)) {
+    return <NodeCardBody renderKind={renderKind} node={node} readOnly={deps.readOnly} />
+  }
   if (isAudioLikeGenerationNodeKind(node.kind)) {
     return <AudioStripNode node={node} />
   }
@@ -136,6 +167,16 @@ function renderNodeBody(
     )
   }
   if (isImageLikeGenerationNodeKind(node.kind)) {
+    // model3d 结果（3D 模型预览）：R3F，独立 viewer。
+    if (node.result?.type === 'model3d' && node.result.url) {
+      return (
+        <div className="relative h-[220px] w-full overflow-hidden bg-workbench-bg/40">
+          <React.Suspense fallback={<div className="h-full w-full bg-workbench-bg/40" />}>
+            <Model3DViewer url={node.result.url} />
+          </React.Suspense>
+        </div>
+      )
+    }
     const imageUrl = node.result?.url || node.result?.thumbnailUrl
     if (!imageUrl) {
       return (
@@ -386,6 +427,17 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
           readOnly: false,
         }, visualSize)}
       </div>
+
+      {/* 失败态：错误卡铺满节点正文（absolute inset-0），盖内容但不挡 resize/handles。 */}
+      {status === 'error' && node.error ? (
+        <NodeErrorReport
+          message={node.error}
+          meta={node.meta}
+          onRetry={() => {
+            void confirmAndRunNode(node.id)
+          }}
+        />
+      ) : null}
 
       {/* 状态行（progress 骨架） */}
       {status === 'running' && node.progress ? (
