@@ -152,9 +152,14 @@ describe('generation canvas control structure', () => {
     expect(selectionDrag).toContain('setCanvasDragging(null, true)')
     expect(viewportGestures).toContain('setCanvasDragging(stageRef.current, true)')
     expect(generationCanvas).toContain("'group/canvas'")
-    for (const overlay of [composer, floatingToolbar, imageStack]) {
+    for (const overlay of [floatingToolbar, imageStack]) {
       expect(overlay).toContain('group-data-[dragging=true]/canvas:invisible')
     }
+    // composer 已迁移到 react-flow（S2 STEP 3）：引擎无关化，不再用画布级 dragging 隐身
+    // （react-flow 用 NodeToolbar isVisible 控制）。断言其已去掉自研 viewport 定位依赖。
+    expect(composer).not.toContain('group-data-[dragging=true]/canvas:invisible')
+    expect(composer).not.toContain("from './useComposerViewportPlacement'")
+    expect(composer).not.toContain('scale(1 / (canvasZoom || 1))')
     // 平移那条必须在**跨过阈值之后**才升：按下就升 = 点一下空白也白写两次属性（08-08 的坑）。
     expect(viewportGestures).toMatch(/start\.moved = true[\s\S]{0,220}setCanvasDragging\(stageRef\.current, true\)/)
     // 旧的按节点作用域已删干净（P1：不留并行版）

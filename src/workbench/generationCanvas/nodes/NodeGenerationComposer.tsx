@@ -42,7 +42,6 @@ import {
   parseGenerationVariantCount,
   type GenerationVariantCount,
 } from './generationVariantCount'
-import { useComposerViewportPlacement } from './useComposerViewportPlacement'
 
 // C5 P2：文本节点的三种生成模式（label 由 composer.append/rewrite/replace 在渲染处翻译）。
 const TEXT_GEN_MODES: { value: TextGenMode; labelKey: string }[] = [
@@ -456,11 +455,8 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
     else await confirmAndRunNode(node.id)
   }
 
-  const { anchorRef, canvasZoom, flipUp, aboveClearance, shiftX } = useComposerViewportPlacement({
-    node,
-    visualSize,
-    gap: composerLayout.gap,
-  })
+  // 定位引擎无关化（S2 STEP 3）：不再用 useComposerViewportPlacement（自研 viewport 反缩放/翻转/避让/夹取）。
+  // 定案：不保留 CSS 反缩放 hack，react-flow 下由 NodeToolbar 官方恒定尺寸接管；本组件只负责"节点下方"简单定位。
 
   // 卡宽 = **内容驱动**（用户拍板 2026-06-16，推翻 06-13 的「按最宽模型恒定宽」）：
   // 卡片 **w-max**（max-content）跟着当前模型的「底栏一行」(锁+参数+生成钮)自然撑开。参数已主次分层
@@ -471,32 +467,17 @@ export default function NodeGenerationComposer({ node, visualSize }: Props): JSX
   // max-content，长 prompt 在卡宽内换行，不把卡撑爆)。max-w 兜底防极端。（离屏测量器已删，纯 CSS。）
 
   return (
-    // 外层只做定位锚（不裁剪），宽度跟随内层卡（w-max 包住按内容长开的卡，便于 -translate-x-1/2 居中）。
+    // 外层只做定位锚（不裁剪）。定位引擎无关化（S2 STEP 3）：
+    // 去掉自研 viewport 反缩放（scale(1/canvasZoom)）/翻转（flipUp）/避让（aboveClearance）/夹取（shiftX）/
+    // group-data-[dragging] 隐身——全部是 react-flow 无的 DOM 契约。react-flow 下由 NodeToolbar 官方接管定位；
+    // 本组件仅保持"节点下方居中"的简单定位（absolute top-full），供两种引擎共用。
     <div
-      ref={anchorRef}
       className={cn(
         'generation-canvas-v2-node__composer',
-        'absolute left-1/2 z-[8] w-max',
-        // 画布拖动期间隐身（拖节点、拖选区/组框、拖画布平移都算；状态源=stage 的 data-dragging，见 canvasDraggingFlag）。
-        // 刻意用 visibility 而非条件卸载：里面是 TipTap 编辑器实例，卸载 = 丢未提交的输入 +
-        // 每次拖动重建编辑器（拖动是最高频动作）。
-        'group-data-[dragging=true]/canvas:invisible',
+        'absolute left-1/2 top-full z-[8] w-max -translate-x-1/2',
+        `mt-[${composerLayout.gap}px]`,
       )}
-      data-flipped={flipUp ? 'true' : 'false'}
-      style={{
-        // 用户反馈③：反向缩放抵消画布 scale(zoom) → 面板恒定屏幕尺寸（缩小画布只缩上面的卡片框，
-        // 不缩这个参数框）。横向居中的 -translate-x-1/2 改写进 transform（否则被 scale 覆盖）。
-        // transform-origin 贴住与节点相连的那条边（默认朝下=顶边、翻上=底边），缩放时锚点不漂移。
-        // 最左的 translateX(shiftX px) 在屏幕空间生效（不被 scale 缩）→ 横向夹取把溢出视口的宽卡拉回。
-        transform: `translateX(${shiftX}px) translateX(-50%) scale(${1 / (canvasZoom || 1)})`,
-        transformOrigin: flipUp ? 'bottom center' : 'top center',
-        ...(flipUp
-          ? { bottom: `calc(100% + ${composerLayout.gap + aboveClearance}px)` }
-          : { top: `calc(100% + ${composerLayout.gap}px)` }),
-        cursor: 'default',
-        userSelect: 'auto',
-        touchAction: 'auto',
-      }}
+      style={{ cursor: 'default', userSelect: 'auto', touchAction: 'auto' }}
       onPointerDown={(event) => event.stopPropagation()}
       {...(acceptsDrop ? dropHandlers : {})}
     >
