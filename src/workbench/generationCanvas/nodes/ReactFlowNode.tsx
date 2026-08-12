@@ -360,9 +360,10 @@ export function ReactFlowNode({ data, selected, dragging }: NodeProps<NomiReactF
       <div
         className={cn(
           'generation-canvas-v2-node',
-          'relative rounded-nomi border bg-nomi-paper shadow-nomi-md',
+          // 对齐老画布 BaseGenerationNode 视觉：节点根无 border/bg（透明壳），1px 内描边走 ring-inset + --nomi-line（深底画布下克制非"白边"），shadow-md 落在 shadow token。
+          'relative overflow-hidden rounded-nomi bg-nomi-paper shadow-nomi-md ring-1 ring-inset ring-nomi-line',
           'text-body-sm text-nomi-ink',
-          selected && 'border-nomi-accent ring-2 ring-nomi-accent/30',
+          selected && 'ring-2 ring-nomi-accent',
           dragging && 'opacity-70',
         )}
         data-node-id={node.id}
