@@ -30,8 +30,12 @@ import { useCanvasProductionActions } from './useCanvasProductionActions'
 import { useCanvasShortcuts } from './useCanvasShortcuts'
 import { getSelectedBounds } from './generationCanvasGeometry'
 import { NodeReadOnlyContext } from '../nodes/NodeReadOnlyContext'
-import { FOCUS_GENERATION_NODE_EVENT } from '../nodes/nodeSizing'
+import { FOCUS_GENERATION_NODE_EVENT, findTimelineDropTarget } from '../nodes/nodeSizing'
 import { completeNodeConnection } from '../nodes/completeNodeConnection'
+import { clientXToFrame } from '../../timeline/timelineEdit'
+import { buildGenerationNodeTimelineClip } from '../../timeline/buildGenerationNodeTimelineClip'
+import { getTrackTypeForClipType } from '../../timeline/timelineTypes'
+import { toast } from '../../../ui/toast'
 import type { GenerationNodeKind } from '../model/generationCanvasTypes'
 import { WORKSPACE_FILE_DRAG_MIME } from '../../explorer/workspaceFileDrag'
 import { ASSET_LIBRARY_DRAG_MIME } from '../../assets/assetLibraryDrag'
@@ -102,6 +106,10 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   const rememberCategoryViewport = useWorkbenchStore((state) => state.rememberCategoryViewport)
   const lastCategoryRef = React.useRef(activeCategoryId)
   const nodesInitialized = useNodesInitialized()
+  // 审计遗漏点 5：订阅 canvasFitNonce（requestCanvasFit 发的一次性 fit 信号），变化即平滑 fit 揭示新节点。
+  // 消费端补在 react-flow 容器；ref 记录上次 nonce，跳过首帧（nonce=0）避免首屏误 fit。
+  const canvasFitNonce = useWorkbenchStore((state) => state.canvasFitNonce)
+  const lastFitNonceRef = React.useRef(canvasFitNonce)
 
   const setCanvasTransform = useGenerationCanvasStore((state) => state.setCanvasTransform)
   const lastSyncedViewportRef = React.useRef<Viewport>({ x: 0, y: 0, zoom: 1 })
@@ -319,7 +327,12 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   )
 
   // 渲染半程：订阅 store nodes/edges（分类过滤后）→ react-flow 数据（单向桥闭环核心）。
+  // 拖拽竞态保护（审计改坏点 4）：拖拽期间（onNodeDrag* / onSelectionDrag* 进行中）跳过全量重映射——
+  // react-flow 本地持有拖拽中的 position，store→react-flow 覆盖会把正在拖的节点弹回拖前值。
+  // 松手 onNodeDragStop/onSelectionDragStop 先把最终位置回写 store，之后重映射读到的就是新位置。
+  const isDraggingRef = React.useRef(false)
   React.useEffect(() => {
+    if (isDraggingRef.current) return
     setRfNodes(toReactFlowNodes(nodes))
     setRfEdges(toReactFlowEdges(edges))
   }, [nodes, edges, setRfEdges, setRfNodes])
@@ -343,6 +356,13 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
     lastCategoryRef.current = activeCategoryId
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCategoryId, nodesInitialized])
+
+  // 审计遗漏点 5 消费端：requestCanvasFit bump nonce → 容器平滑 fit 揭示新节点（Agent 建节点 / 落画布 / 素材定位等）。
+  React.useEffect(() => {
+    if (canvasFitNonce === lastFitNonceRef.current) return
+    lastFitNonceRef.current = canvasFitNonce
+    if (nodesInitialized) void fitView({ padding: 0.2, duration: 300 })
+  }, [canvasFitNonce, fitView, nodesInitialized])
 
   // S5-C5 minimap + 缩放条：复用老画布 CanvasNavigationStack（纯 props 驱动）。
   // 坐标源 = store.canvasZoom/Offset（B1 已同步 react-flow viewport 镜像）+ 容器尺寸。
@@ -473,8 +493,62 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
   )
 
   // 拖拽结束：一次回写最终 position + undo 入栈（moveNode 内部已 emit canvas.node.moved）。
-  const handleNodeDragStop = React.useCallback((_event: unknown, node: NomiReactFlowNode) => {
-    applyDragSettledToStore(node.id, node.position)
+  // 审计改坏点 3：拖节点到时间轴建 clip。react-flow 节点拖拽是 pointer 事件，不走时间轴 HTML5
+  // drop（onDrop 接不到），故这里复用老 useNodeDragResize.handlePointerUp 的 findTimelineDropTarget
+  // 命中判定：松手点落在时间轴轨道 DOM 上 → 用光标处帧建 clip；节点已有生成结果才建（无结果 toast 提示）。
+  const handleTimelineDropOnDragStop = React.useCallback(
+    (point: { clientX: number; clientY: number }, node: NomiReactFlowNode) => {
+      const droppedOverTimeline = findTimelineDropTarget(point.clientX, point.clientY)
+      if (!droppedOverTimeline) return
+      const nomiNode = node.data?.nomiNode
+      if (!nomiNode?.result?.url) {
+        toast(t('generationCommon.node.generateBeforeTimeline'), 'info')
+        return
+      }
+      const timeline = useWorkbenchStore.getState().timeline
+      const liveNode =
+        useGenerationCanvasStore.getState().nodes.find((candidate) => candidate.id === node.id) || nomiNode
+      const rect = droppedOverTimeline.getBoundingClientRect()
+      const startFrame = clientXToFrame(point.clientX, rect.left, timeline.scale)
+      void buildGenerationNodeTimelineClip(liveNode, { fps: timeline.fps, startFrame }).then((clip) => {
+        if (!clip) return
+        useWorkbenchStore.getState().addTimelineClipAtFrame(clip, getTrackTypeForClipType(clip.type), startFrame)
+        // 建 clip 后把节点挪回原位（对齐老逻辑，避免建 clip 时节点已被拖离原位）。
+        const origin = node.data?.nomiNode?.position
+        if (origin) useGenerationCanvasStore.getState().moveNode(node.id, origin, { persist: false, emit: false })
+      })
+    },
+    [t],
+  )
+
+  const handleNodeDragStart = React.useCallback(() => {
+    isDraggingRef.current = true
+  }, [])
+
+  const handleNodeDragStop = React.useCallback(
+    (event: MouseEvent | TouchEvent, node: NomiReactFlowNode) => {
+      isDraggingRef.current = false
+      // OnNodeDrag 的 event 是原生 DOM event；TouchEvent 无 clientX（touches），仅 MouseEvent 判定时间轴。
+      if ('clientX' in event) handleTimelineDropOnDragStop(event, node)
+      applyDragSettledToStore(node.id, node.position)
+      useGenerationCanvasStore.getState().commitPersistedChange()
+    },
+    [handleTimelineDropOnDragStop],
+  )
+
+  // 审计改坏点 1：多选拖拽（框选后拖多节点）触发 onSelectionDrag*，与 onNodeDrag* 互斥——
+  // 原只挂 onNodeDragStop，多选松手不回写 store，下次重映射整组弹回。这里补 onSelectionDragStop：
+  // 逐个把 react-flow 拖后的绝对 position 回写 store（applyDragSettledToStore 一次一个）+ persist。
+  const handleSelectionDragStart = React.useCallback(() => {
+    isDraggingRef.current = true
+  }, [])
+
+  const handleSelectionDragStop = React.useCallback((_event: React.MouseEvent, nodes: NomiReactFlowNode[]) => {
+    isDraggingRef.current = false
+    // 多选拖拽只回写位置，不建时间轴 clip（多选拖到时间轴属边缘场景，老逻辑"当前节点"语义难对齐）。
+    nodes.forEach((dragNode) => {
+      applyDragSettledToStore(dragNode.id, dragNode.position)
+    })
     useGenerationCanvasStore.getState().commitPersistedChange()
   }, [])
 
@@ -493,11 +567,11 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
 
   const handleStageDrop = React.useCallback(
     (event: React.DragEvent<HTMLDivElement>) => {
-      // S1 未做变换同步（B1 是 S5），react-flow 初始 viewport 保持 {0,0,1}，
-      // 故 stage 坐标 == canvas 坐标。S5 接入变换同步后再喂真实 offset/zoom。
-      handleCanvasStageDrop(event, { readOnly, offset: { x: 0, y: 0 }, zoom: 1, activeCategoryId })
+      // 审计改坏点 2：S5 已接入变换同步（useOnViewportChange → store.canvasZoom/Offset），
+      // viewport 不再恒为 {0,0,1}。drop 落点换算必须用真实 offset/zoom，否则缩放/平移后拖入素材错位。
+      handleCanvasStageDrop(event, { readOnly, offset: canvasOffset, zoom: canvasZoom || 1, activeCategoryId })
     },
-    [activeCategoryId, readOnly],
+    [activeCategoryId, canvasOffset, canvasZoom, readOnly],
   )
 
   const handleStageDragOver = React.useCallback(
@@ -540,7 +614,10 @@ function ReactFlowGenerationCanvasInner({ readOnly = false }: { readOnly?: boole
           onEdgesChange={handleEdgesChange}
           onConnect={handleConnect}
           onConnectEnd={handleConnectEnd}
+          onNodeDragStart={handleNodeDragStart}
           onNodeDragStop={handleNodeDragStop}
+          onSelectionDragStart={handleSelectionDragStart}
+          onSelectionDragStop={handleSelectionDragStop}
           onDrop={handleStageDrop}
           onDragOver={handleStageDragOver}
           onNodeContextMenu={handleNodeContextMenu}

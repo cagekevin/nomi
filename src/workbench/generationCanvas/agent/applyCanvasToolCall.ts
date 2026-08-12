@@ -331,6 +331,10 @@ export async function applyCanvasToolCall(toolName: string, args: unknown, gestu
         }
       }
     }
+    // Agent 建节点后请画布平滑 fit 揭示（审计遗漏点 5，§四.5 铁律 3）：
+    // 新节点可能落在当前视口外，不触发 fit 用户以为「没建」。requestCanvasFit bump nonce，
+    // react-flow 容器订阅 nonce 变化后 fitView（消费端在 ReactFlowGenerationCanvas）。
+    if (created.length) useWorkbenchStore.getState().requestCanvasFit()
     return {
       createdNodeIds: created.map((node) => node.id),
       clientIdToNodeId,
