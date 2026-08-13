@@ -11,7 +11,8 @@ export type NomiColorSchemeContextValue = {
 }
 
 export const STORAGE_KEY = 'nomi-color-scheme'
-export const DEFAULT_COLOR_SCHEME: NomiColorScheme = 'light'
+// 默认钉死暗色：用户要求 24h 夜晚模式，不再按本地时间自动在明暗间切换（2026-08-13）。
+export const DEFAULT_COLOR_SCHEME: NomiColorScheme = 'dark'
 
 export const NomiColorSchemeContext = React.createContext<NomiColorSchemeContextValue | null>(null)
 
@@ -19,15 +20,14 @@ export function normalizeColorScheme(value: unknown): NomiColorScheme {
   return value === 'dark' ? 'dark' : DEFAULT_COLOR_SCHEME
 }
 
-// 「天黑自动暗」时间窗（本地时间）：傍晚 18:00 起用暗色，清晨 7:00 起回浅色。
-// 用户反馈「浅色晚上睁不开眼」→ 默认按时间走、与 macOS 外观无关（用户拍板 2026-06-24）。
+// 已废弃「天黑自动暗」时间窗：用户要求 24h 夜晚模式，不再随本地时间切换（2026-08-13）。
+// 常量保留仅作历史引用，不再被任何逻辑读取。
 export const NIGHT_START_HOUR = 18
 export const NIGHT_END_HOUR = 7
 
-export function getTimeBasedColorScheme(now: Date = new Date()): NomiColorScheme {
-  const hour = now.getHours()
-  const isNight = hour >= NIGHT_START_HOUR || hour < NIGHT_END_HOUR
-  return isNight ? 'dark' : 'light'
+// 恒返回暗色：未显式选过时（首次/未选过）即 24h 夜晚模式，不再读本地时间窗。
+export function getTimeBasedColorScheme(_now: Date = new Date()): NomiColorScheme {
+  return 'dark'
 }
 
 /** 读用户显式存储；无（首次/未选过）返回 null —— 调用方再决定回退到时间策略。 */
